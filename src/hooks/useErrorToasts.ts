@@ -18,6 +18,37 @@ interface ErrorEvent {
   };
 }
 
+// Define systemic errors that should have longer deduplication windows
+const SYSTEMIC_ERROR_PATTERNS = [
+  'insufficient balance',
+  'rate limit',
+  'websocket',
+  'connection',
+];
+
+// Per-error-type rate limiting configuration
+const ERROR_RATE_LIMITS = {
+  'insufficient-balance': 60000, // 1 minute for balance errors
+  'rate-limit': 30000, // 30 seconds for rate limit errors
+  'websocket': 30000, // 30 seconds for websocket errors
+  'default': 2000, // 2 seconds for other errors
+};
+
+function getErrorCategory(title: string): string {
+  const lowerTitle = title.toLowerCase();
+
+  if (lowerTitle.includes('insufficient balance')) return 'insufficient-balance';
+  if (lowerTitle.includes('rate limit')) return 'rate-limit';
+  if (lowerTitle.includes('websocket') || lowerTitle.includes('connection')) return 'websocket';
+
+  return 'default';
+}
+
+function isSystemicError(title: string): boolean {
+  const lowerTitle = title.toLowerCase();
+  return SYSTEMIC_ERROR_PATTERNS.some(pattern => lowerTitle.includes(pattern));
+}
+
 export function useErrorToasts() {
   // Use a ref to track processed messages and prevent duplicates
   const processedErrors = useRef<Map<string, number>>(new Map());
@@ -33,8 +64,8 @@ export function useErrorToasts() {
         const now = Date.now();
         const expiredKeys: string[] = [];
         errorsMap.forEach((timestamp, key) => {
-          // Remove errors older than 10 seconds
-          if (now - timestamp > 10000) {
+          // Remove errors older than 60 seconds
+          if (now - timestamp > 60000) {
             expiredKeys.push(key);
           }
         });
@@ -54,13 +85,18 @@ export function useErrorToasts() {
 
         const { title, message: errorMessage, details } = message.data || {};
 
-        // Create a unique key for deduplication
-        const errorKey = `${message.type}-${title}-${errorMessage}`;
+        // Determine error category and rate limit
+        const errorCategory = getErrorCategory(title);
+        const rateLimit = ERROR_RATE_LIMITS[errorCategory as keyof typeof ERROR_RATE_LIMITS] || ERROR_RATE_LIMITS.default;
 
-        // Check if we've recently processed this error
+        // Create a unique key for deduplication based on category
+        const errorKey = `${errorCategory}-${message.type}`;
+
+        // Check if we've recently processed this error category
         if (processedErrors.current.has(errorKey)) {
           const lastProcessed = processedErrors.current.get(errorKey) || 0;
-          if (Date.now() - lastProcessed < 2000) { // Skip if processed within last 2 seconds
+          if (Date.now() - lastProcessed < rateLimit) {
+            // Skip toast but still allow persistent banner to update
             return;
           }
         }
@@ -68,7 +104,13 @@ export function useErrorToasts() {
         // Mark as processed
         processedErrors.current.set(errorKey, Date.now());
 
-        // Handle error events based on type
+        // Skip showing toast for systemic errors (they'll be shown in the banner)
+        if (isSystemicError(title)) {
+          // Systemic errors are handled by PersistentErrorBanner
+          return;
+        }
+
+        // Handle error events based on type (only non-systemic errors)
         switch (message.type) {
           case 'websocket_error':
             showWebSocketError(title, errorMessage, details);

@@ -7,6 +7,7 @@ import ConfigProvider from "@/components/ConfigProvider";
 import ErrorNotificationButton from "@/components/ErrorNotificationButton";
 import { WebSocketProvider } from "@/providers/WebSocketProvider";
 import { WebSocketErrorModal } from "@/components/WebSocketErrorModal";
+import { PersistentErrorBanner } from "@/components/PersistentErrorBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,6 +44,7 @@ export default function RootLayout({
           <AuthProvider>
             <ConfigProvider>
               <WebSocketProvider>
+                <PersistentErrorBanner />
                 {children}
                 <Toaster />
                 <ErrorNotificationButton />

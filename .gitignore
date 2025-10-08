@@ -48,3 +48,7 @@ data/*.db-wal
 # user configuration
 config.user.json*
 config.json*
+
+# claude code local settings
+.claude/settings.local.json
+.claude/agents/

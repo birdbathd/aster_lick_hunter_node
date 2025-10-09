@@ -30,43 +30,70 @@ export function OptimizerWeightSliders({
   const total = pnlWeight + sharpeWeight + drawdownWeight;
   const isValid = Math.abs(total - 100) < 0.1;
 
-  // Helper function to distribute remaining weight proportionally
-  const distributeRemaining = (
-    newValue: number,
-    otherValue1: number,
-    otherValue2: number,
-    onChange1: (v: number) => void,
-    onChange2: (v: number) => void
-  ) => {
-    const remaining = 100 - newValue;
+  const handlePnlChange = (value: number) => {
+    const remaining = 100 - value;
+    const currentOthersSum = sharpeWeight + drawdownWeight;
 
-    // If other values sum to 0, split evenly
-    if (otherValue1 + otherValue2 === 0) {
-      onChange1(Math.round(remaining / 2));
-      onChange2(remaining - Math.round(remaining / 2));
+    if (currentOthersSum === 0) {
+      // Split evenly
+      const half = Math.floor(remaining / 2);
+      onPnlWeightChange(value);
+      onSharpeWeightChange(half);
+      onDrawdownWeightChange(remaining - half);
     } else {
-      // Distribute proportionally to maintain ratio
-      const ratio1 = otherValue1 / (otherValue1 + otherValue2);
-      const new1 = Math.round(remaining * ratio1);
-      const new2 = remaining - new1;
-      onChange1(new1);
-      onChange2(new2);
+      // Distribute proportionally
+      const sharpeRatio = sharpeWeight / currentOthersSum;
+      const newSharpe = Math.round(remaining * sharpeRatio);
+      const newDrawdown = remaining - newSharpe;
+
+      onPnlWeightChange(value);
+      onSharpeWeightChange(newSharpe);
+      onDrawdownWeightChange(newDrawdown);
     }
   };
 
-  const handlePnlChange = (value: number) => {
-    onPnlWeightChange(value);
-    distributeRemaining(value, sharpeWeight, drawdownWeight, onSharpeWeightChange, onDrawdownWeightChange);
-  };
-
   const handleSharpeChange = (value: number) => {
-    onSharpeWeightChange(value);
-    distributeRemaining(value, pnlWeight, drawdownWeight, onPnlWeightChange, onDrawdownWeightChange);
+    const remaining = 100 - value;
+    const currentOthersSum = pnlWeight + drawdownWeight;
+
+    if (currentOthersSum === 0) {
+      // Split evenly
+      const half = Math.floor(remaining / 2);
+      onSharpeWeightChange(value);
+      onPnlWeightChange(half);
+      onDrawdownWeightChange(remaining - half);
+    } else {
+      // Distribute proportionally
+      const pnlRatio = pnlWeight / currentOthersSum;
+      const newPnl = Math.round(remaining * pnlRatio);
+      const newDrawdown = remaining - newPnl;
+
+      onSharpeWeightChange(value);
+      onPnlWeightChange(newPnl);
+      onDrawdownWeightChange(newDrawdown);
+    }
   };
 
   const handleDrawdownChange = (value: number) => {
-    onDrawdownWeightChange(value);
-    distributeRemaining(value, pnlWeight, sharpeWeight, onPnlWeightChange, onSharpeWeightChange);
+    const remaining = 100 - value;
+    const currentOthersSum = pnlWeight + sharpeWeight;
+
+    if (currentOthersSum === 0) {
+      // Split evenly
+      const half = Math.floor(remaining / 2);
+      onDrawdownWeightChange(value);
+      onPnlWeightChange(half);
+      onSharpeWeightChange(remaining - half);
+    } else {
+      // Distribute proportionally
+      const pnlRatio = pnlWeight / currentOthersSum;
+      const newPnl = Math.round(remaining * pnlRatio);
+      const newSharpe = remaining - newPnl;
+
+      onDrawdownWeightChange(value);
+      onPnlWeightChange(newPnl);
+      onSharpeWeightChange(newSharpe);
+    }
   };
 
   return (

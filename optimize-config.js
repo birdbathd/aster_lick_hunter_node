@@ -107,9 +107,26 @@ const formatWeightPercent = (value) => {
 const dbPath = path.join(__dirname, 'data', 'liquidations.db');
 const db = new Database(dbPath, { readonly: true });
 
-// Load current configuration
-const configPath = path.join(__dirname, 'config.user.json');
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+// Load current configuration with fallback to default
+function loadConfig() {
+  const userConfigPath = path.join(__dirname, 'config.user.json');
+  const defaultConfigPath = path.join(__dirname, 'config.default.json');
+
+  // Try user config first
+  if (fs.existsSync(userConfigPath)) {
+    return JSON.parse(fs.readFileSync(userConfigPath, 'utf8'));
+  }
+
+  // Fall back to default config
+  if (fs.existsSync(defaultConfigPath)) {
+    console.log('Using default configuration (config.user.json not found)');
+    return JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
+  }
+
+  throw new Error('No configuration file found (checked config.user.json and config.default.json)');
+}
+
+const config = loadConfig();
 
 // API helper functions for balance fetching
 function buildSignedQuery(params, credentials) {
@@ -2324,6 +2341,7 @@ async function maybeApplyOptimizedConfig(originalConfig, optimizedConfig, summar
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.join(__dirname, `config.user.backup-${timestamp}.json`);
+  const configPath = path.join(__dirname, 'config.user.json');
 
   fs.writeFileSync(backupPath, JSON.stringify(originalConfig, null, 2));
   fs.writeFileSync(configPath, JSON.stringify(optimizedConfig, null, 2));

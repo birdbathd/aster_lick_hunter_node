@@ -70,6 +70,7 @@ interface PnLData {
   dailyPnL: DailyPnL[];
   metrics: PerformanceMetrics;
   range: string;
+  recordCount?: number;
   error?: string;
 }
 
@@ -467,10 +468,16 @@ export default function PnLChart() {
     if (!metrics || !chartData.length || totalBalance <= 0) return 0;
 
     const daysWithData = chartData.length;
+
+    // Avoid division by zero or invalid calculations
+    if (daysWithData === 0) return 0;
+
     const totalReturn = metrics.totalPnl / totalBalance;
 
-    // Annualize the return based on actual trading days
-    const annualizedReturn = (totalReturn / daysWithData) * 365;
+    // Use compound annual growth rate (CAGR) formula: (1 + totalReturn)^(365/days) - 1
+    // This accounts for compounding effects, unlike simple linear extrapolation
+    const annualizedReturn = Math.pow(1 + totalReturn, 365 / daysWithData) - 1;
+
     return annualizedReturn * 100; // Convert to percentage
   };
 
@@ -538,6 +545,16 @@ export default function PnLChart() {
       </CardHeader>
       {!isCollapsed && (
         <CardContent>
+        {/* Data Quality Warning - Show if data might be truncated */}
+        {pnlData?.recordCount && pnlData.recordCount >= 1000 && (
+          <div className="mb-2 p-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md">
+            <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400">
+              <span className="font-medium">⚠️ Data Limit Reached</span>
+              <span>Showing {pnlData.recordCount} records (API limit). Some historical data may be missing.</span>
+            </div>
+          </div>
+        )}
+
         {/* Performance Summary - Minimal inline design */}
         {safeMetrics && (
           <div className="flex flex-wrap items-center gap-3 mb-3 pb-3 border-b">

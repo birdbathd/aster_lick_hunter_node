@@ -85,6 +85,8 @@ export interface DailyPnL {
   realizedPnl: number;
   commission: number;
   fundingFee: number;
+  insuranceClear: number;
+  marketMerchantReward: number;
   netPnl: number;
   tradeCount: number;
 }
@@ -92,6 +94,9 @@ export interface DailyPnL {
 export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
   const dailyMap = new Map<string, DailyPnL>();
   const _todayString = new Date().toISOString().split('T')[0];
+
+  // Track unique trade IDs per day to avoid double-counting
+  const dailyTradeIds = new Map<string, Set<string>>();
 
   records.forEach((record, _index) => {
     const date = new Date(record.time).toISOString().split('T')[0];
@@ -103,18 +108,25 @@ export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
         realizedPnl: 0,
         commission: 0,
         fundingFee: 0,
+        insuranceClear: 0,
+        marketMerchantReward: 0,
         netPnl: 0,
         tradeCount: 0,
       });
+      dailyTradeIds.set(date, new Set<string>());
     }
 
     const daily = dailyMap.get(date)!;
-
+    const tradeIds = dailyTradeIds.get(date)!;
 
     switch (record.incomeType) {
       case 'REALIZED_PNL':
         daily.realizedPnl += amount;
-        daily.tradeCount++;
+        // Only count unique trades using tradeId
+        if (record.tradeId && !tradeIds.has(record.tradeId)) {
+          tradeIds.add(record.tradeId);
+          daily.tradeCount++;
+        }
         break;
       case 'COMMISSION':
         daily.commission += amount;
@@ -122,13 +134,19 @@ export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
       case 'FUNDING_FEE':
         daily.fundingFee += amount;
         break;
+      case 'INSURANCE_CLEAR':
+        daily.insuranceClear += amount;
+        break;
+      case 'MARKET_MERCHANT_RETURN_REWARD':
+        daily.marketMerchantReward += amount;
+        break;
     }
   });
 
-  // Calculate net PnL for each day
+  // Calculate net PnL for each day including all income types
   dailyMap.forEach((daily, _date) => {
-    daily.netPnl = daily.realizedPnl + daily.commission + daily.fundingFee;
-
+    daily.netPnl = daily.realizedPnl + daily.commission + daily.fundingFee +
+                   daily.insuranceClear + daily.marketMerchantReward;
   });
 
   const result = Array.from(dailyMap.values()).sort((a, b) =>
@@ -143,6 +161,8 @@ export interface PerformanceMetrics {
   totalRealizedPnl: number;
   totalCommission: number;
   totalFundingFee: number;
+  totalInsuranceClear: number;
+  totalMarketMerchantReward: number;
   winRate: number;
   profitableDays: number;
   lossDays: number;
@@ -161,6 +181,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
       totalRealizedPnl: 0,
       totalCommission: 0,
       totalFundingFee: 0,
+      totalInsuranceClear: 0,
+      totalMarketMerchantReward: 0,
       winRate: 0,
       profitableDays: 0,
       lossDays: 0,
@@ -177,6 +199,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
   let totalRealizedPnl = 0;
   let totalCommission = 0;
   let totalFundingFee = 0;
+  let totalInsuranceClear = 0;
+  let totalMarketMerchantReward = 0;
   let profitableDays = 0;
   let lossDays = 0;
   let bestDay = dailyPnL[0];
@@ -195,6 +219,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
     totalRealizedPnl += day.realizedPnl;
     totalCommission += day.commission;
     totalFundingFee += day.fundingFee;
+    totalInsuranceClear += day.insuranceClear || 0;
+    totalMarketMerchantReward += day.marketMerchantReward || 0;
 
     if (day.netPnl > 0) {
       profitableDays++;
@@ -221,6 +247,7 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
       maxDrawdown = drawdown;
     }
 
+    // Store absolute PnL for now (will be used for basic volatility)
     dailyReturns.push(day.netPnl);
   });
 
@@ -230,13 +257,16 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
   const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
 
   // Calculate Sharpe Ratio (simplified - assuming risk-free rate of 0)
+  // Note: Ideally this should use percentage returns relative to starting capital,
+  // but without knowing the starting capital, we use absolute PnL returns
+  // This gives a proxy for risk-adjusted returns
   let sharpeRatio = 0;
   if (dailyReturns.length > 1) {
     const mean = avgDailyPnl;
     const variance = dailyReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / dailyReturns.length;
     const stdDev = Math.sqrt(variance);
     if (stdDev > 0) {
-      // Annualized Sharpe ratio (assuming 365 trading days)
+      // Annualized Sharpe ratio (assuming 365 trading days in crypto)
       sharpeRatio = (mean / stdDev) * Math.sqrt(365);
     }
   }
@@ -246,6 +276,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
     totalRealizedPnl,
     totalCommission,
     totalFundingFee,
+    totalInsuranceClear,
+    totalMarketMerchantReward,
     winRate,
     profitableDays,
     lossDays,
@@ -313,11 +345,13 @@ export async function getTimeRangeIncome(
 
     // CRITICAL FIX: If we hit the limit and might be missing recent data, fetch more recent data
     if (records.length >= 1000 && ['7d', '30d', '90d', '1y', 'all'].includes(range)) {
+      console.log(`[Income API] Warning: Hit 1000 record limit for ${range} range. May be missing historical data.`);
 
       const today = new Date().toISOString().split('T')[0];
       const hasToday = records.some(r => new Date(r.time).toISOString().split('T')[0] === today);
 
       if (!hasToday) {
+        console.log(`[Income API] Today's data not found in initial fetch. Fetching recent records...`);
 
         // Fetch most recent 500 records to ensure we get today
         const recentParams: IncomeHistoryParams = {
@@ -335,6 +369,7 @@ export async function getTimeRangeIncome(
           const timeSet = new Set(records.map(r => r.time));
           const newRecords = recentRecords.filter(r => !timeSet.has(r.time));
           records = [...records, ...newRecords];
+          console.log(`[Income API] Merged ${newRecords.length} recent records to include today's data`);
         }
       }
     }

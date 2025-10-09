@@ -296,7 +296,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
     const separateSizes: Record<string, boolean> = {};
     Object.keys(config.symbols).forEach(symbol => {
       const symbolConfig = config.symbols[symbol];
-      // Check if either longTradeSize or shortTradeSize exists (not undefined)
+      // Set to true if either longTradeSize or shortTradeSize are explicitly defined
       const hasLongSize = symbolConfig.longTradeSize !== undefined;
       const hasShortSize = symbolConfig.shortTradeSize !== undefined;
       separateSizes[symbol] = hasLongSize || hasShortSize;

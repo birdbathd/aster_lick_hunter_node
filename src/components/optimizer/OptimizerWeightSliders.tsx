@@ -31,69 +31,22 @@ export function OptimizerWeightSliders({
   const isValid = Math.abs(total - 100) < 0.1;
 
   const handlePnlChange = (value: number) => {
-    const remaining = 100 - value;
-    const currentOthersSum = sharpeWeight + drawdownWeight;
-
-    if (currentOthersSum === 0) {
-      // Split evenly
-      const half = Math.floor(remaining / 2);
-      onPnlWeightChange(value);
-      onSharpeWeightChange(half);
-      onDrawdownWeightChange(remaining - half);
-    } else {
-      // Distribute proportionally
-      const sharpeRatio = sharpeWeight / currentOthersSum;
-      const newSharpe = Math.round(remaining * sharpeRatio);
-      const newDrawdown = remaining - newSharpe;
-
-      onPnlWeightChange(value);
-      onSharpeWeightChange(newSharpe);
-      onDrawdownWeightChange(newDrawdown);
-    }
+    onPnlWeightChange(value);
+    // Auto-adjust drawdown to maintain 100% total
+    const newDrawdown = Math.max(0, Math.min(100, 100 - value - sharpeWeight));
+    onDrawdownWeightChange(newDrawdown);
   };
 
   const handleSharpeChange = (value: number) => {
-    const remaining = 100 - value;
-    const currentOthersSum = pnlWeight + drawdownWeight;
-
-    if (currentOthersSum === 0) {
-      // Split evenly
-      const half = Math.floor(remaining / 2);
-      onSharpeWeightChange(value);
-      onPnlWeightChange(half);
-      onDrawdownWeightChange(remaining - half);
-    } else {
-      // Distribute proportionally
-      const pnlRatio = pnlWeight / currentOthersSum;
-      const newPnl = Math.round(remaining * pnlRatio);
-      const newDrawdown = remaining - newPnl;
-
-      onSharpeWeightChange(value);
-      onPnlWeightChange(newPnl);
-      onDrawdownWeightChange(newDrawdown);
-    }
+    onSharpeWeightChange(value);
+    // Auto-adjust drawdown to maintain 100% total
+    const newDrawdown = Math.max(0, Math.min(100, 100 - pnlWeight - value));
+    onDrawdownWeightChange(newDrawdown);
   };
 
   const handleDrawdownChange = (value: number) => {
-    const remaining = 100 - value;
-    const currentOthersSum = pnlWeight + sharpeWeight;
-
-    if (currentOthersSum === 0) {
-      // Split evenly
-      const half = Math.floor(remaining / 2);
-      onDrawdownWeightChange(value);
-      onPnlWeightChange(half);
-      onSharpeWeightChange(remaining - half);
-    } else {
-      // Distribute proportionally
-      const pnlRatio = pnlWeight / currentOthersSum;
-      const newPnl = Math.round(remaining * pnlRatio);
-      const newSharpe = remaining - newPnl;
-
-      onDrawdownWeightChange(value);
-      onPnlWeightChange(newPnl);
-      onSharpeWeightChange(newSharpe);
-    }
+    // Just update drawdown directly - user can adjust PnL/Sharpe to balance
+    onDrawdownWeightChange(value);
   };
 
   return (
@@ -155,7 +108,7 @@ export function OptimizerWeightSliders({
         </p>
       </div>
 
-      <div className="pt-2 border-t">
+      <div className="pt-2 border-t space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Total:</span>
           <span className={`font-medium ${isValid ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
@@ -163,6 +116,9 @@ export function OptimizerWeightSliders({
             {!isValid && ' (Must equal 100%)'}
           </span>
         </div>
+        <p className="text-xs text-muted-foreground">
+          💡 Tip: Adjusting PnL or Sharpe will auto-adjust Drawdown to maintain 100% total
+        </p>
       </div>
     </div>
   );

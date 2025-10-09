@@ -99,7 +99,10 @@ export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
   const dailyTradeIds = new Map<string, Set<string>>();
 
   records.forEach((record, _index) => {
-    const date = new Date(record.time).toISOString().split('T')[0];
+    // Use UTC date to avoid timezone shifts
+    // The API returns timestamps in milliseconds
+    const d = new Date(record.time);
+    const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     const amount = parseFloat(record.income);
 
     if (!dailyMap.has(date)) {

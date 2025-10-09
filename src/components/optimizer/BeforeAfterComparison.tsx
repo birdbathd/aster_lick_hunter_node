@@ -67,14 +67,24 @@ export function BeforeAfterComparison({ results }: BeforeAfterComparisonProps) {
       const optimizedLong = optimized.long || {};
       const optimizedShort = optimized.short || {};
 
+      // Cap Sharpe Ratios between -5 and 5 to prevent infinity, then average per symbol (like the optimizer does)
+      const capSharpe = (value: number) => {
+        if (!Number.isFinite(value)) return 0;
+        return Math.min(Math.max(value, -5), 5);
+      };
+
+      const currentSymbolSharpe = (capSharpe(currentLong.sharpe || 0) + capSharpe(currentShort.sharpe || 0)) / 2;
+      const optimizedSymbolSharpe = (capSharpe(optimizedLong.sharpe || 0) + capSharpe(optimizedShort.sharpe || 0)) / 2;
+
       return {
-        currentSharpe: acc.currentSharpe + (currentLong.sharpe || 0) + (currentShort.sharpe || 0),
-        optimizedSharpe: acc.optimizedSharpe + (optimizedLong.sharpe || 0) + (optimizedShort.sharpe || 0),
+        currentSharpe: acc.currentSharpe + currentSymbolSharpe,
+        optimizedSharpe: acc.optimizedSharpe + optimizedSymbolSharpe,
         currentDrawdown: Math.max(acc.currentDrawdown, currentLong.maxDrawdown || 0, currentShort.maxDrawdown || 0),
         optimizedDrawdown: Math.max(acc.optimizedDrawdown, optimizedLong.maxDrawdown || 0, optimizedShort.maxDrawdown || 0),
         currentWinRate: acc.currentWinRate + (currentLong.winRate || 0) + (currentShort.winRate || 0),
         optimizedWinRate: acc.optimizedWinRate + (optimizedLong.winRate || 0) + (optimizedShort.winRate || 0),
-        count: acc.count + 2, // Count both long and short
+        symbolCount: acc.symbolCount + 1, // Count symbols
+        sideCount: acc.sideCount + 2, // Count sides for win rate averaging
       };
     },
     {
@@ -84,14 +94,15 @@ export function BeforeAfterComparison({ results }: BeforeAfterComparisonProps) {
       optimizedDrawdown: 0,
       currentWinRate: 0,
       optimizedWinRate: 0,
-      count: 0,
+      symbolCount: 0,
+      sideCount: 0,
     }
-  ) || { count: 0 };
+  ) || { symbolCount: 0, sideCount: 0 };
 
-  const avgCurrentSharpe = aggregateMetrics.count > 0 ? aggregateMetrics.currentSharpe / aggregateMetrics.count : 0;
-  const avgOptimizedSharpe = aggregateMetrics.count > 0 ? aggregateMetrics.optimizedSharpe / aggregateMetrics.count : 0;
-  const avgCurrentWinRate = aggregateMetrics.count > 0 ? aggregateMetrics.currentWinRate / aggregateMetrics.count : 0;
-  const avgOptimizedWinRate = aggregateMetrics.count > 0 ? aggregateMetrics.optimizedWinRate / aggregateMetrics.count : 0;
+  const avgCurrentSharpe = aggregateMetrics.symbolCount > 0 ? aggregateMetrics.currentSharpe / aggregateMetrics.symbolCount : 0;
+  const avgOptimizedSharpe = aggregateMetrics.symbolCount > 0 ? aggregateMetrics.optimizedSharpe / aggregateMetrics.symbolCount : 0;
+  const avgCurrentWinRate = aggregateMetrics.sideCount > 0 ? aggregateMetrics.currentWinRate / aggregateMetrics.sideCount : 0;
+  const avgOptimizedWinRate = aggregateMetrics.sideCount > 0 ? aggregateMetrics.optimizedWinRate / aggregateMetrics.sideCount : 0;
 
   const sharpeChange = avgCurrentSharpe > 0 ? ((avgOptimizedSharpe - avgCurrentSharpe) / avgCurrentSharpe) * 100 : 0;
   const drawdownChange = aggregateMetrics.currentDrawdown > 0

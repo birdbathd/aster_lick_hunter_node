@@ -623,6 +623,8 @@ export default function PnLChart() {
                 tickFormatter={formatDateTick}
                 domain={['dataMin', 'dataMax']}
                 padding={{ left: 10, right: 10 }}
+                interval="preserveStartEnd"
+                minTickGap={20}
               />
               <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip content={<CustomTooltip />} />
@@ -643,6 +645,8 @@ export default function PnLChart() {
                 dataKey="date"
                 tick={{ fontSize: 10 }}
                 tickFormatter={formatDateTick}
+                interval="preserveStartEnd"
+                minTickGap={20}
               />
               <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip content={<CustomTooltip />} />

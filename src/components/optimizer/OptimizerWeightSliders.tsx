@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 
@@ -17,35 +17,56 @@ interface OptimizerWeightSlidersProps {
  * OptimizerWeightSliders Component
  *
  * Customizable weight controls for PnL/Sharpe/Drawdown scoring
- * Auto-adjusts other weights proportionally to maintain 100% sum
+ * Auto-adjusts Drawdown weight to maintain 100% sum when PnL or Sharpe changes
+ * Uses internal state to avoid stale closure issues
  */
 export function OptimizerWeightSliders({
-  pnlWeight,
-  sharpeWeight,
-  drawdownWeight,
+  pnlWeight: initialPnl,
+  sharpeWeight: initialSharpe,
+  drawdownWeight: initialDrawdown,
   onPnlWeightChange,
   onSharpeWeightChange,
   onDrawdownWeightChange,
 }: OptimizerWeightSlidersProps) {
-  const total = pnlWeight + sharpeWeight + drawdownWeight;
+  // Internal state to avoid stale closures in parent callbacks
+  const [pnl, setPnl] = useState(initialPnl);
+  const [sharpe, setSharpe] = useState(initialSharpe);
+  const [drawdown, setDrawdown] = useState(initialDrawdown);
+
+  // Sync with external props when they change
+  useEffect(() => {
+    setPnl(initialPnl);
+    setSharpe(initialSharpe);
+    setDrawdown(initialDrawdown);
+  }, [initialPnl, initialSharpe, initialDrawdown]);
+
+  const total = pnl + sharpe + drawdown;
   const isValid = Math.abs(total - 100) < 0.1;
 
   const handlePnlChange = (value: number) => {
+    const newDrawdown = Math.max(0, Math.min(100, 100 - value - sharpe));
+
+    setPnl(value);
+    setDrawdown(newDrawdown);
+
+    // Call parent callbacks with final values
     onPnlWeightChange(value);
-    // Auto-adjust drawdown to maintain 100% total
-    const newDrawdown = Math.max(0, Math.min(100, 100 - value - sharpeWeight));
     onDrawdownWeightChange(newDrawdown);
   };
 
   const handleSharpeChange = (value: number) => {
+    const newDrawdown = Math.max(0, Math.min(100, 100 - pnl - value));
+
+    setSharpe(value);
+    setDrawdown(newDrawdown);
+
+    // Call parent callbacks with final values
     onSharpeWeightChange(value);
-    // Auto-adjust drawdown to maintain 100% total
-    const newDrawdown = Math.max(0, Math.min(100, 100 - pnlWeight - value));
     onDrawdownWeightChange(newDrawdown);
   };
 
   const handleDrawdownChange = (value: number) => {
-    // Just update drawdown directly - user can adjust PnL/Sharpe to balance
+    setDrawdown(value);
     onDrawdownWeightChange(value);
   };
 
@@ -54,14 +75,14 @@ export function OptimizerWeightSliders({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="pnl-weight">PnL Weight</Label>
-          <span className="text-sm font-medium">{pnlWeight}%</span>
+          <span className="text-sm font-medium">{pnl}%</span>
         </div>
         <Slider
           id="pnl-weight"
           min={0}
           max={100}
           step={5}
-          value={[pnlWeight]}
+          value={[pnl]}
           onValueChange={(value) => handlePnlChange(value[0])}
           className="w-full"
         />
@@ -73,14 +94,14 @@ export function OptimizerWeightSliders({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="sharpe-weight">Sharpe Ratio Weight</Label>
-          <span className="text-sm font-medium">{sharpeWeight}%</span>
+          <span className="text-sm font-medium">{sharpe}%</span>
         </div>
         <Slider
           id="sharpe-weight"
           min={0}
           max={100}
           step={5}
-          value={[sharpeWeight]}
+          value={[sharpe]}
           onValueChange={(value) => handleSharpeChange(value[0])}
           className="w-full"
         />
@@ -92,14 +113,14 @@ export function OptimizerWeightSliders({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="drawdown-weight">Drawdown Protection Weight</Label>
-          <span className="text-sm font-medium">{drawdownWeight}%</span>
+          <span className="text-sm font-medium">{drawdown}%</span>
         </div>
         <Slider
           id="drawdown-weight"
           min={0}
           max={100}
           step={5}
-          value={[drawdownWeight]}
+          value={[drawdown]}
           onValueChange={(value) => handleDrawdownChange(value[0])}
           className="w-full"
         />

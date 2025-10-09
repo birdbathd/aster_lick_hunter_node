@@ -290,7 +290,7 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
   };
 }
 
-// Helper function to get income for a specific time range with proper API limits and caching
+// Helper function to get income for a specific time range with pagination to fetch all records
 export async function getTimeRangeIncome(
   credentials: ApiCredentials,
   range: '24h' | '7d' | '30d' | '90d' | '1y' | 'all'
@@ -302,6 +302,7 @@ export async function getTimeRangeIncome(
   const cacheAge = cached ? Date.now() - cached.timestamp : 0;
 
   if (cached && cacheAge < cacheTTL) {
+    console.log(`[Income API] Using cached data for ${range} (age: ${Math.floor(cacheAge / 1000)}s)`);
     return cached.data;
   }
 
@@ -330,53 +331,70 @@ export async function getTimeRangeIncome(
       break;
   }
 
-
-  // Use the API's startTime parameter for efficiency
-  // The issue: 7d range has too much data and 1000 limit cuts off recent data
-  // Solution: For 7d, fetch in reverse chronological order or use pagination
-  const params: IncomeHistoryParams = {
-    startTime: startTime,
-    endTime: now,
-    limit: 1000,
-  };
-
   try {
-    let records = await getIncomeHistory(credentials, params);
+    const allRecords: IncomeRecord[] = [];
+    let currentEndTime = now;
+    let batchCount = 0;
+    const maxBatches = 10; // Safety limit to prevent infinite loops
 
-    // CRITICAL FIX: If we hit the limit and might be missing recent data, fetch more recent data
-    if (records.length >= 1000 && ['7d', '30d', '90d', '1y', 'all'].includes(range)) {
-      console.log(`[Income API] Warning: Hit 1000 record limit for ${range} range. May be missing historical data.`);
+    console.log(`[Income API] Fetching income history for ${range}...`);
 
-      const today = new Date().toISOString().split('T')[0];
-      const hasToday = records.some(r => new Date(r.time).toISOString().split('T')[0] === today);
+    // Pagination: Keep fetching until we get less than 1000 records or hit the startTime
+    while (batchCount < maxBatches) {
+      batchCount++;
 
-      if (!hasToday) {
-        console.log(`[Income API] Today's data not found in initial fetch. Fetching recent records...`);
+      const params: IncomeHistoryParams = {
+        startTime: startTime,
+        endTime: currentEndTime,
+        limit: 1000,
+      };
 
-        // Fetch most recent 500 records to ensure we get today
-        const recentParams: IncomeHistoryParams = {
-          endTime: now,
-          limit: 500,
-        };
+      const batch = await getIncomeHistory(credentials, params);
 
-        const recentRecords = await getIncomeHistory(credentials, recentParams);
+      if (batch.length === 0) {
+        console.log(`[Income API] Batch ${batchCount}: No more records found`);
+        break;
+      }
 
-        // Check if recent records have today's data
-        const recentHasToday = recentRecords.some(r => new Date(r.time).toISOString().split('T')[0] === today);
+      console.log(`[Income API] Batch ${batchCount}: Fetched ${batch.length} records`);
 
-        if (recentHasToday) {
-          // Merge recent records with historical, removing duplicates based on time
-          const timeSet = new Set(records.map(r => r.time));
-          const newRecords = recentRecords.filter(r => !timeSet.has(r.time));
-          records = [...records, ...newRecords];
-          console.log(`[Income API] Merged ${newRecords.length} recent records to include today's data`);
-        }
+      // Add to our collection
+      allRecords.push(...batch);
+
+      // If we got less than 1000 records, we've reached the end
+      if (batch.length < 1000) {
+        console.log(`[Income API] Completed: Got ${batch.length} records (less than limit). All data fetched.`);
+        break;
+      }
+
+      // Update endTime to the oldest record's time minus 1ms for next batch
+      // This ensures we don't re-fetch the same records
+      const oldestRecord = batch[batch.length - 1];
+      currentEndTime = oldestRecord.time - 1;
+
+      // Safety check: if we've gone past our startTime, stop
+      if (startTime && currentEndTime < startTime) {
+        console.log(`[Income API] Reached startTime boundary. Stopping pagination.`);
+        break;
       }
     }
 
+    if (batchCount >= maxBatches) {
+      console.warn(`[Income API] Warning: Hit maximum batch limit (${maxBatches}). There may be more data available.`);
+    }
+
+    // Remove duplicates based on tranId (transaction ID is unique)
+    const uniqueRecords = Array.from(
+      new Map(allRecords.map(record => [record.tranId, record])).values()
+    );
+
+    // Sort by time ascending (oldest first)
+    uniqueRecords.sort((a, b) => a.time - b.time);
+
+    console.log(`[Income API] Total unique records fetched: ${uniqueRecords.length} (from ${batchCount} batches)`);
 
     // Cache the result
-    incomeCache.set(cacheKey, { data: records, timestamp: now });
+    incomeCache.set(cacheKey, { data: uniqueRecords, timestamp: now });
 
     // Clean up old cache entries
     for (const [key, value] of incomeCache.entries()) {
@@ -387,9 +405,9 @@ export async function getTimeRangeIncome(
       }
     }
 
-    return records;
+    return uniqueRecords;
   } catch (error) {
-    console.error(`API call failed for ${range}:`, error);
+    console.error(`[Income API] Error fetching data for ${range}:`, error);
     return [];
   }
 }

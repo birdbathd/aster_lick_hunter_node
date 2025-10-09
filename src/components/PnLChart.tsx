@@ -545,12 +545,12 @@ export default function PnLChart() {
       </CardHeader>
       {!isCollapsed && (
         <CardContent>
-        {/* Data Quality Warning - Show if data might be truncated */}
+        {/* Data Quality Info - Show record count for large datasets */}
         {pnlData?.recordCount && pnlData.recordCount >= 1000 && (
-          <div className="mb-2 p-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md">
-            <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400">
-              <span className="font-medium">⚠️ Data Limit Reached</span>
-              <span>Showing {pnlData.recordCount} records (API limit). Some historical data may be missing.</span>
+          <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
+            <div className="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-400">
+              <span className="font-medium">ℹ️ Large Dataset</span>
+              <span>Loaded {pnlData.recordCount.toLocaleString()} income records using pagination.</span>
             </div>
           </div>
         )}

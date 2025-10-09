@@ -229,6 +229,12 @@ export default function OptimizerPage() {
                     onCancel={handleOptimizationCancel}
                     onError={(error) => {
                       console.error('Optimization error:', error);
+                      toast.error('Optimization Failed', {
+                        description: error,
+                        duration: 10000,
+                      });
+                      setJobId(null);
+                      setActiveSection('config');
                     }}
                   />
                 </CardContent>

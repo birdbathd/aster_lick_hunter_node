@@ -394,12 +394,21 @@ function analyzePriceDataCoverage() {
     WHERE symbol = 'ASTERUSDT'
   `).get();
 
-  const timeSpan = (coverage.last_time - coverage.first_time) / 1000 / 60 / 60; // hours
-  const avgGap = timeSpan * 60 / coverage.total_events; // minutes per event
-
   console.log();
   console.log(`???? ASTERUSDT Price Coverage:`);
   console.log(`   Total Events: ${coverage.total_events}`);
+
+  if (coverage.total_events === 0) {
+    console.log(`   ⚠️  No liquidation data available for analysis`);
+    console.log(`   ℹ️  The optimizer requires historical liquidation data to function`);
+    console.log(`   ℹ️  Please run the bot to collect data, or import existing data`);
+    console.log();
+    throw new Error('Insufficient liquidation data: 0 events found. The optimizer requires historical data to analyze.');
+  }
+
+  const timeSpan = (coverage.last_time - coverage.first_time) / 1000 / 60 / 60; // hours
+  const avgGap = timeSpan * 60 / coverage.total_events; // minutes per event
+
   console.log(`   Time Span: ${timeSpan.toFixed(1)} hours`);
   console.log(`   Average Gap: ${avgGap.toFixed(1)} minutes between price points`);
   console.log(`   Price Range: $${coverage.min_price.toFixed(4)} - $${coverage.max_price.toFixed(4)}`);

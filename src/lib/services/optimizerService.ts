@@ -350,18 +350,25 @@ async function runOptimization(jobId: string): Promise<void> {
           // Extract error message from output
           let errorMessage = 'Optimizer failed';
 
+          // Check for NODE_MODULE_VERSION mismatch (native module rebuild needed)
+          const moduleVersionMismatch = stderrBuffer.match(/NODE_MODULE_VERSION (\d+).*requires.*NODE_MODULE_VERSION (\d+)/);
+          if (moduleVersionMismatch) {
+            errorMessage = 'Native module version mismatch. Please run: npm rebuild better-sqlite3';
+          }
           // Look for "Error:" or "⚠️" messages in the output
-          const errorMatch = stdoutBuffer.match(/Error: (.+?)(?:\n|$)/);
-          const warningMatch = stdoutBuffer.match(/⚠️\s+(.+?)(?:\n|$)/);
+          else {
+            const errorMatch = stdoutBuffer.match(/Error: (.+?)(?:\n|$)/);
+            const warningMatch = stdoutBuffer.match(/⚠️\s+(.+?)(?:\n|$)/);
 
-          if (errorMatch) {
-            errorMessage = errorMatch[1];
-          } else if (warningMatch) {
-            errorMessage = warningMatch[1];
-          } else if (stderrBuffer.trim()) {
-            // Use last line of stderr if no structured error found
-            const lines = stderrBuffer.trim().split('\n');
-            errorMessage = lines[lines.length - 1];
+            if (errorMatch) {
+              errorMessage = errorMatch[1];
+            } else if (warningMatch) {
+              errorMessage = warningMatch[1];
+            } else if (stderrBuffer.trim()) {
+              // Use last line of stderr if no structured error found
+              const lines = stderrBuffer.trim().split('\n');
+              errorMessage = lines[lines.length - 1];
+            }
           }
 
           reject(new Error(errorMessage));

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 
@@ -15,9 +15,9 @@ interface OptimizerWeightSlidersProps {
 
 /**
  * OptimizerWeightSliders Component
- * 
+ *
  * Customizable weight controls for PnL/Sharpe/Drawdown scoring
- * Auto-normalizes to ensure total equals 100%
+ * Auto-adjusts other weights proportionally to maintain 100% sum
  */
 export function OptimizerWeightSliders({
   pnlWeight,
@@ -30,15 +30,44 @@ export function OptimizerWeightSliders({
   const total = pnlWeight + sharpeWeight + drawdownWeight;
   const isValid = Math.abs(total - 100) < 0.1;
 
-  // Auto-normalize when total deviates significantly
-  useEffect(() => {
-    if (!isValid && total > 0) {
-      const normalizationFactor = 100 / total;
-      onPnlWeightChange(Math.round(pnlWeight * normalizationFactor));
-      onSharpeWeightChange(Math.round(sharpeWeight * normalizationFactor));
-      onDrawdownWeightChange(Math.round(drawdownWeight * normalizationFactor));
+  // Helper function to distribute remaining weight proportionally
+  const distributeRemaining = (
+    newValue: number,
+    otherValue1: number,
+    otherValue2: number,
+    onChange1: (v: number) => void,
+    onChange2: (v: number) => void
+  ) => {
+    const remaining = 100 - newValue;
+
+    // If other values sum to 0, split evenly
+    if (otherValue1 + otherValue2 === 0) {
+      onChange1(Math.round(remaining / 2));
+      onChange2(remaining - Math.round(remaining / 2));
+    } else {
+      // Distribute proportionally to maintain ratio
+      const ratio1 = otherValue1 / (otherValue1 + otherValue2);
+      const new1 = Math.round(remaining * ratio1);
+      const new2 = remaining - new1;
+      onChange1(new1);
+      onChange2(new2);
     }
-  }, [total, isValid, pnlWeight, sharpeWeight, drawdownWeight, onPnlWeightChange, onSharpeWeightChange, onDrawdownWeightChange]);
+  };
+
+  const handlePnlChange = (value: number) => {
+    onPnlWeightChange(value);
+    distributeRemaining(value, sharpeWeight, drawdownWeight, onSharpeWeightChange, onDrawdownWeightChange);
+  };
+
+  const handleSharpeChange = (value: number) => {
+    onSharpeWeightChange(value);
+    distributeRemaining(value, pnlWeight, drawdownWeight, onPnlWeightChange, onDrawdownWeightChange);
+  };
+
+  const handleDrawdownChange = (value: number) => {
+    onDrawdownWeightChange(value);
+    distributeRemaining(value, pnlWeight, sharpeWeight, onPnlWeightChange, onSharpeWeightChange);
+  };
 
   return (
     <div className="space-y-6">
@@ -53,7 +82,7 @@ export function OptimizerWeightSliders({
           max={100}
           step={5}
           value={[pnlWeight]}
-          onValueChange={(value) => onPnlWeightChange(value[0])}
+          onValueChange={(value) => handlePnlChange(value[0])}
           className="w-full"
         />
         <p className="text-xs text-muted-foreground">
@@ -72,7 +101,7 @@ export function OptimizerWeightSliders({
           max={100}
           step={5}
           value={[sharpeWeight]}
-          onValueChange={(value) => onSharpeWeightChange(value[0])}
+          onValueChange={(value) => handleSharpeChange(value[0])}
           className="w-full"
         />
         <p className="text-xs text-muted-foreground">
@@ -91,7 +120,7 @@ export function OptimizerWeightSliders({
           max={100}
           step={5}
           value={[drawdownWeight]}
-          onValueChange={(value) => onDrawdownWeightChange(value[0])}
+          onValueChange={(value) => handleDrawdownChange(value[0])}
           className="w-full"
         />
         <p className="text-xs text-muted-foreground">

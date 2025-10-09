@@ -423,7 +423,15 @@ export default function PositionTable({
                 <TableRow key={key} className="h-12">
                   <TableCell className="py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-sm">{position.symbol}</span>
+                      <a 
+                        href={`https://www.asterdex.com/en/futures/v1/${position.symbol}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="font-medium text-sm hover:underline hover:text-primary transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {position.symbol}
+                      </a>
                       <Badge variant="secondary" className="h-4 text-[10px] px-1">
                         {position.leverage}x
                       </Badge>

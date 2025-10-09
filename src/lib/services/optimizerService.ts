@@ -278,9 +278,16 @@ async function runOptimization(jobId: string): Promise<void> {
       cwd: process.cwd()
     });
     let currentSymbolIndex = 0;
+
+    // Capture output for error reporting
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+
     // Parse output to track progress
     optimizerProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString();
+      stdoutBuffer += output;
+
       // Parse for progress indicators
       // Look for "Analyzing X (Y/Z)" pattern
       const symbolMatch = output.match(/Analyzing (\w+) \((\d+)\/(\d+)\)/i);
@@ -288,14 +295,14 @@ async function runOptimization(jobId: string): Promise<void> {
         const symbolName = symbolMatch[1];
         currentSymbolIndex = parseInt(symbolMatch[2]);
         const total = parseInt(symbolMatch[3]);
-        
+
         // Progress: 15% start + 70% for symbols + 15% finalization
         const symbolProgress = 15 + (currentSymbolIndex / total) * 70;
-        
+
         // Estimate remaining time
         const elapsed = Date.now() - job.startTime;
         const estimated = (elapsed / symbolProgress) * (100 - symbolProgress);
-        
+
         updateJobProgress(
           jobId,
           symbolProgress,
@@ -310,6 +317,7 @@ async function runOptimization(jobId: string): Promise<void> {
     });
     optimizerProcess.stderr.on('data', (data: Buffer) => {
       const output = data.toString();
+      stderrBuffer += output;
       console.error('Optimizer stderr:', output);
       errorLogger
         .logError(new Error(output), {
@@ -333,7 +341,24 @@ async function runOptimization(jobId: string): Promise<void> {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`Optimizer exited with code ${code}`));
+          // Extract error message from output
+          let errorMessage = 'Optimizer failed';
+
+          // Look for "Error:" or "⚠️" messages in the output
+          const errorMatch = stdoutBuffer.match(/Error: (.+?)(?:\n|$)/);
+          const warningMatch = stdoutBuffer.match(/⚠️\s+(.+?)(?:\n|$)/);
+
+          if (errorMatch) {
+            errorMessage = errorMatch[1];
+          } else if (warningMatch) {
+            errorMessage = warningMatch[1];
+          } else if (stderrBuffer.trim()) {
+            // Use last line of stderr if no structured error found
+            const lines = stderrBuffer.trim().split('\n');
+            errorMessage = lines[lines.length - 1];
+          }
+
+          reject(new Error(errorMessage));
         }
       });
       optimizerProcess.on('error', (error: Error) => {

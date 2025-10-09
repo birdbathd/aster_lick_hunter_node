@@ -223,9 +223,30 @@ export default function ErrorsPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        toast.success('Copied to clipboard');
+      } else {
+        // Fallback for older browsers or insecure contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          toast.success('Copied to clipboard');
+        } catch (err) {
+          toast.error('Failed to copy to clipboard');
+        }
+        document.body.removeChild(textArea);
+      }
+    } catch (err) {
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   const generateAIDebugInfo = (error: ErrorLog) => {

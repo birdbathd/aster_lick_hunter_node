@@ -318,22 +318,28 @@ async function runOptimization(jobId: string): Promise<void> {
     optimizerProcess.stderr.on('data', (data: Buffer) => {
       const output = data.toString();
       stderrBuffer += output;
-      console.error('Optimizer stderr:', output);
-      errorLogger
-        .logError(new Error(output), {
-          type: 'system',
-          severity: 'high',
-          context: {
-            component: 'optimizer',
-            metadata: {
-              jobId,
-              stream: 'stderr'
+
+      // Filter out benign stderr messages (Node.js version banner, etc.)
+      const isBenign = output.trim().match(/^Node\.js v\d+\.\d+\.\d+$/);
+
+      if (!isBenign) {
+        console.error('Optimizer stderr:', output);
+        errorLogger
+          .logError(new Error(output), {
+            type: 'system',
+            severity: 'high',
+            context: {
+              component: 'optimizer',
+              metadata: {
+                jobId,
+                stream: 'stderr'
+              }
             }
-          }
-        })
-        .catch((logError) => {
-          console.error('Failed to log optimizer stderr', logError);
-        });
+          })
+          .catch((logError) => {
+            console.error('Failed to log optimizer stderr', logError);
+          });
+      }
     });
     // Wait for process to complete
     await new Promise<void>((resolve, reject) => {

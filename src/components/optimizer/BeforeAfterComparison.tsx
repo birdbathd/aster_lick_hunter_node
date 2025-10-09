@@ -61,14 +61,20 @@ export function BeforeAfterComparison({ results }: BeforeAfterComparisonProps) {
       const current = rec.performance?.current || {};
       const optimized = rec.performance?.optimized || {};
 
+      // Performance data has separate long/short metrics, we need to combine them
+      const currentLong = current.long || {};
+      const currentShort = current.short || {};
+      const optimizedLong = optimized.long || {};
+      const optimizedShort = optimized.short || {};
+
       return {
-        currentSharpe: acc.currentSharpe + (current.sharpeRatio || 0),
-        optimizedSharpe: acc.optimizedSharpe + (optimized.sharpeRatio || 0),
-        currentDrawdown: Math.max(acc.currentDrawdown, current.maxDrawdown || 0),
-        optimizedDrawdown: Math.max(acc.optimizedDrawdown, optimized.maxDrawdown || 0),
-        currentWinRate: acc.currentWinRate + (current.winRate || 0),
-        optimizedWinRate: acc.optimizedWinRate + (optimized.winRate || 0),
-        count: acc.count + 1,
+        currentSharpe: acc.currentSharpe + (currentLong.sharpe || 0) + (currentShort.sharpe || 0),
+        optimizedSharpe: acc.optimizedSharpe + (optimizedLong.sharpe || 0) + (optimizedShort.sharpe || 0),
+        currentDrawdown: Math.max(acc.currentDrawdown, currentLong.maxDrawdown || 0, currentShort.maxDrawdown || 0),
+        optimizedDrawdown: Math.max(acc.optimizedDrawdown, optimizedLong.maxDrawdown || 0, optimizedShort.maxDrawdown || 0),
+        currentWinRate: acc.currentWinRate + (currentLong.winRate || 0) + (currentShort.winRate || 0),
+        optimizedWinRate: acc.optimizedWinRate + (optimizedLong.winRate || 0) + (optimizedShort.winRate || 0),
+        count: acc.count + 2, // Count both long and short
       };
     },
     {

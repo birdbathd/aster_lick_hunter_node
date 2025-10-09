@@ -715,8 +715,9 @@ export class Hunter extends EventEmitter {
         return;
       }
 
-      // Determine order type from config (default to LIMIT for better fills)
-      let orderType = symbolConfig.orderType || 'LIMIT';
+      // Determine order type from config
+      // If forceMarketEntry is true, always use MARKET orders for opening positions
+      let orderType = symbolConfig.forceMarketEntry ? 'MARKET' : (symbolConfig.orderType || 'LIMIT');
       let orderPrice = entryPrice;
 
       if (orderType === 'LIMIT') {

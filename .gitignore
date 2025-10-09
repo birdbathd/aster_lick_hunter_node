@@ -46,7 +46,7 @@ data/*.db-journal
 data/*.db-wal
 
 # user configuration
-config.user.json
+config.user*
 config.user.backup*.json
 config.json
 data/optimizer-jobs.json

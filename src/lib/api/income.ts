@@ -41,7 +41,10 @@ export type IncomeType =
   | 'FUNDING_FEE'
   | 'COMMISSION'
   | 'INSURANCE_CLEAR'
-  | 'MARKET_MERCHANT_RETURN_REWARD';
+  | 'MARKET_MERCHANT_RETURN_REWARD'
+  | 'APOLLOX_DEX_REBATE'         // Referral/trading rebates (undocumented)
+  | 'USDF_BASE_REWARD'           // USDF staking rewards (undocumented)
+  | 'AUTO_EXCHANGE';             // Automatic asset conversion (undocumented)
 
 export interface IncomeRecord {
   symbol: string;
@@ -88,6 +91,8 @@ export interface DailyPnL {
   fundingFee: number;
   insuranceClear: number;
   marketMerchantReward: number;
+  apolloxRebate: number;              // Trading rebates/referral rewards
+  usdfReward: number;                 // USDF staking rewards
   netPnl: number;
   tradeCount: number;
 }
@@ -100,6 +105,8 @@ export interface DailyPnLWithBreakdown extends DailyPnL {
     fundingFee: number;
     insuranceClear: number;
     marketMerchantReward: number;
+    apolloxRebate: number;
+    usdfReward: number;
   };
 }
 
@@ -111,6 +118,8 @@ export interface SymbolPnL {
   fundingFee: number;
   insuranceClear: number;
   marketMerchantReward: number;
+  apolloxRebate: number;
+  usdfReward: number;
   netPnl: number;
   winCount: number;
   lossCount: number;
@@ -139,6 +148,8 @@ export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
         fundingFee: 0,
         insuranceClear: 0,
         marketMerchantReward: 0,
+        apolloxRebate: 0,
+        usdfReward: 0,
         netPnl: 0,
         tradeCount: 0,
       });
@@ -169,13 +180,20 @@ export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
       case 'MARKET_MERCHANT_RETURN_REWARD':
         daily.marketMerchantReward += amount;
         break;
+      case 'APOLLOX_DEX_REBATE':
+        daily.apolloxRebate += amount;
+        break;
+      case 'USDF_BASE_REWARD':
+        daily.usdfReward += amount;
+        break;
     }
   });
 
   // Calculate net PnL for each day including all income types
   dailyMap.forEach((daily, _date) => {
     daily.netPnl = daily.realizedPnl + daily.commission + daily.fundingFee +
-                   daily.insuranceClear + daily.marketMerchantReward;
+                   daily.insuranceClear + daily.marketMerchantReward +
+                   daily.apolloxRebate + daily.usdfReward;
   });
 
   const result = Array.from(dailyMap.values()).sort((a, b) =>
@@ -192,6 +210,8 @@ export interface PerformanceMetrics {
   totalFundingFee: number;
   totalInsuranceClear: number;
   totalMarketMerchantReward: number;
+  totalApolloxRebate: number;
+  totalUsdfReward: number;
   winRate: number;
   profitableDays: number;
   lossDays: number;
@@ -212,6 +232,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
       totalFundingFee: 0,
       totalInsuranceClear: 0,
       totalMarketMerchantReward: 0,
+      totalApolloxRebate: 0,
+      totalUsdfReward: 0,
       winRate: 0,
       profitableDays: 0,
       lossDays: 0,
@@ -230,6 +252,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
   let totalFundingFee = 0;
   let totalInsuranceClear = 0;
   let totalMarketMerchantReward = 0;
+  let totalApolloxRebate = 0;
+  let totalUsdfReward = 0;
   let profitableDays = 0;
   let lossDays = 0;
   let bestDay = dailyPnL[0];
@@ -250,6 +274,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
     totalFundingFee += day.fundingFee;
     totalInsuranceClear += day.insuranceClear || 0;
     totalMarketMerchantReward += day.marketMerchantReward || 0;
+    totalApolloxRebate += day.apolloxRebate || 0;
+    totalUsdfReward += day.usdfReward || 0;
 
     if (day.netPnl > 0) {
       profitableDays++;
@@ -307,6 +333,8 @@ export function calculatePerformanceMetrics(dailyPnL: DailyPnL[]): PerformanceMe
     totalFundingFee,
     totalInsuranceClear,
     totalMarketMerchantReward,
+    totalApolloxRebate,
+    totalUsdfReward,
     winRate,
     profitableDays,
     lossDays,
@@ -461,6 +489,8 @@ export function aggregateBySymbol(records: IncomeRecord[]): SymbolPnL[] {
         fundingFee: 0,
         insuranceClear: 0,
         marketMerchantReward: 0,
+        apolloxRebate: 0,
+        usdfReward: 0,
         netPnl: 0,
         winCount: 0,
         lossCount: 0,
@@ -494,6 +524,12 @@ export function aggregateBySymbol(records: IncomeRecord[]): SymbolPnL[] {
       case 'MARKET_MERCHANT_RETURN_REWARD':
         symbolData.marketMerchantReward += amount;
         break;
+      case 'APOLLOX_DEX_REBATE':
+        symbolData.apolloxRebate += amount;
+        break;
+      case 'USDF_BASE_REWARD':
+        symbolData.usdfReward += amount;
+        break;
     }
   });
 
@@ -513,7 +549,8 @@ export function aggregateBySymbol(records: IncomeRecord[]): SymbolPnL[] {
     // Calculate net PnL
     symbolData.netPnl = symbolData.realizedPnl + symbolData.commission +
                         symbolData.fundingFee + symbolData.insuranceClear +
-                        symbolData.marketMerchantReward;
+                        symbolData.marketMerchantReward + symbolData.apolloxRebate +
+                        symbolData.usdfReward;
 
     // Calculate win rate
     symbolData.winRate = symbolData.tradeCount > 0
@@ -549,6 +586,8 @@ export async function aggregateBySymbolWithTrades(
         fundingFee: 0,
         insuranceClear: 0,
         marketMerchantReward: 0,
+        apolloxRebate: 0,
+        usdfReward: 0,
         netPnl: 0,
         winCount: 0,
         lossCount: 0,
@@ -570,6 +609,12 @@ export async function aggregateBySymbolWithTrades(
         break;
       case 'MARKET_MERCHANT_RETURN_REWARD':
         symbolData.marketMerchantReward += amount;
+        break;
+      case 'APOLLOX_DEX_REBATE':
+        symbolData.apolloxRebate += amount;
+        break;
+      case 'USDF_BASE_REWARD':
+        symbolData.usdfReward += amount;
         break;
     }
   });
@@ -630,6 +675,8 @@ export async function aggregateBySymbolWithTrades(
           fundingFee: 0,
           insuranceClear: 0,
           marketMerchantReward: 0,
+          apolloxRebate: 0,
+          usdfReward: 0,
           netPnl: 0,
           winCount: 0,
           lossCount: 0,
@@ -661,7 +708,8 @@ export async function aggregateBySymbolWithTrades(
     // Calculate net PnL
     symbolData.netPnl = symbolData.realizedPnl + symbolData.commission +
                         symbolData.fundingFee + symbolData.insuranceClear +
-                        symbolData.marketMerchantReward;
+                        symbolData.marketMerchantReward + symbolData.apolloxRebate +
+                        symbolData.usdfReward;
 
     // Calculate win rate
     symbolData.winRate = symbolData.tradeCount > 0
@@ -802,6 +850,8 @@ export async function aggregateDailyPnLWithTrades(
         fundingFee: 0,
         insuranceClear: 0,
         marketMerchantReward: 0,
+        apolloxRebate: 0,
+        usdfReward: 0,
         netPnl: 0,
         tradeCount: 0,
       });
@@ -823,6 +873,12 @@ export async function aggregateDailyPnLWithTrades(
       case 'MARKET_MERCHANT_RETURN_REWARD':
         daily.marketMerchantReward += amount;
         break;
+      case 'APOLLOX_DEX_REBATE':
+        daily.apolloxRebate += amount;
+        break;
+      case 'USDF_BASE_REWARD':
+        daily.usdfReward += amount;
+        break;
     }
   });
 
@@ -839,6 +895,8 @@ export async function aggregateDailyPnLWithTrades(
         fundingFee: 0,
         insuranceClear: 0,
         marketMerchantReward: 0,
+        apolloxRebate: 0,
+        usdfReward: 0,
         netPnl: 0,
         tradeCount: 0,
       });
@@ -856,7 +914,8 @@ export async function aggregateDailyPnLWithTrades(
   // Calculate net PnL for each day
   dailyMap.forEach(daily => {
     daily.netPnl = daily.realizedPnl + daily.commission + daily.fundingFee +
-                   daily.insuranceClear + daily.marketMerchantReward;
+                   daily.insuranceClear + daily.marketMerchantReward +
+                   daily.apolloxRebate + daily.usdfReward;
   });
 
   const result = Array.from(dailyMap.values()).sort((a, b) =>

@@ -299,7 +299,18 @@ export default function PnLChart() {
   const formatDateTick = (value: string) => {
     // CRITICAL FIX: Parse date string correctly to avoid timezone shift
     // "2025-09-26" should display as 9/26, not 9/25
-    const [year, month, day] = value.split('-').map(Number);
+    // Use direct string parsing instead of Date object to avoid timezone issues
+    if (!value || typeof value !== 'string') return '';
+
+    const parts = value.split('-');
+    if (parts.length !== 3) return value; // Return as-is if not in expected format
+
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+
+    // Validate parsed values
+    if (isNaN(year) || isNaN(month) || isNaN(day)) return value;
 
     switch (timeRange) {
       case '24h':
@@ -311,7 +322,8 @@ export default function PnLChart() {
         return `${month}/${day}`;
       case '1y':
       case 'all':
-        return `${year}-${month.toString().padStart(2, '0')}`;
+        // For long ranges, show year-month to save space
+        return `${year.toString().slice(2)}-${month.toString().padStart(2, '0')}`;
       default:
         return `${month}/${day}`;
     }
@@ -333,9 +345,21 @@ export default function PnLChart() {
       const isDaily = chartType === 'daily';
       const displayValue = isDaily ? data.netPnl : data.cumulativePnl;
 
+      // Format date without timezone conversion
+      const formatTooltipDate = (dateStr: string) => {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10);
+          const day = parseInt(parts[2], 10);
+          return `${month}/${day}/${year}`;
+        }
+        return dateStr;
+      };
+
       return (
         <div className="bg-background/95 backdrop-blur border rounded-md shadow-lg p-1.5">
-          <p className="text-[10px] font-medium text-muted-foreground">{new Date(label).toLocaleDateString()}</p>
+          <p className="text-[10px] font-medium text-muted-foreground">{formatTooltipDate(label)}</p>
           <div className="flex items-center gap-2 mt-0.5">
             <span className={`text-sm font-semibold ${displayValue >= 0 ? 'text-green-500' : 'text-red-500'}`}>
               {formatTooltipValue(displayValue)}
@@ -621,10 +645,9 @@ export default function PnLChart() {
                 dataKey="date"
                 tick={{ fontSize: 10 }}
                 tickFormatter={formatDateTick}
-                domain={['dataMin', 'dataMax']}
                 padding={{ left: 10, right: 10 }}
-                interval="preserveStartEnd"
-                minTickGap={20}
+                interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
+                minTickGap={chartData.length <= 10 ? 10 : 20}
               />
               <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip content={<CustomTooltip />} />
@@ -645,8 +668,8 @@ export default function PnLChart() {
                 dataKey="date"
                 tick={{ fontSize: 10 }}
                 tickFormatter={formatDateTick}
-                interval="preserveStartEnd"
-                minTickGap={20}
+                interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
+                minTickGap={chartData.length <= 10 ? 10 : 20}
               />
               <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip content={<CustomTooltip />} />

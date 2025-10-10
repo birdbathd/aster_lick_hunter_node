@@ -146,9 +146,10 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={isMounted && pathname === item.href}
+                    isActive={isMounted ? pathname === item.href : false}
+                    suppressHydrationWarning
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} suppressHydrationWarning>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>

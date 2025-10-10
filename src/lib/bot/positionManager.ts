@@ -10,6 +10,7 @@ import { symbolPrecision } from '../utils/symbolPrecision';
 import { getBalanceService } from '../services/balanceService';
 import { errorLogger } from '../services/errorLogger';
 import { getPriceService } from '../services/priceService';
+import { invalidateIncomeCache } from '../api/income';
 
 // Minimal local state - only track order IDs linked to positions
 interface PositionOrders {
@@ -895,6 +896,10 @@ export class PositionManager extends EventEmitter implements PositionTracker {
 
           // Position was actually closed (symbol was in update with 0 amount)
           console.log(`PositionManager: Position ${key} was closed`);
+
+          // Invalidate income cache when position closes (generates realized PnL, commission)
+          invalidateIncomeCache();
+          console.log(`PositionManager: Invalidated income cache after position ${key} closed`);
 
           const cancelLockKey = `cancel_${symbol}`;
 

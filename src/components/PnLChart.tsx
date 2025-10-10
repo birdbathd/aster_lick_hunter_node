@@ -48,6 +48,8 @@ interface DailyPnL {
   realizedPnl: number;
   commission: number;
   fundingFee: number;
+  insuranceClear: number;
+  marketMerchantReward: number;
   netPnl: number;
   tradeCount: number;
   cumulativePnl?: number; // Optional field added when chartType is 'cumulative'
@@ -55,6 +57,11 @@ interface DailyPnL {
 
 interface PerformanceMetrics {
   totalPnl: number;
+  totalRealizedPnl: number;
+  totalCommission: number;
+  totalFundingFee: number;
+  totalInsuranceClear: number;
+  totalMarketMerchantReward: number;
   winRate: number;
   profitableDays: number;
   lossDays: number;
@@ -244,27 +251,18 @@ export default function PnLChart() {
       console.log(`[PnL Chart] Date range: ${processedData[0].date} to ${processedData[processedData.length - 1].date}`);
     }
 
-    // CRITICAL FIX: Remove client-side filtering for shorter ranges
-    // The API already filters correctly, and client-side filtering can cause data inconsistencies
-    if (timeRange === '1y' || timeRange === 'all') {
-      // Only filter for very long ranges where we might want to limit chart performance
-      const cutoffDate = new Date();
-      if (timeRange === '1y') {
-        cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
-      } else {
-        // For 'all', limit to 2 years for performance
-        cutoffDate.setFullYear(cutoffDate.getFullYear() - 2);
-      }
-      const cutoffDateString = cutoffDate.toISOString().split('T')[0];
-      console.log(`[PnL Chart] Filtering ${timeRange}: cutoff date = ${cutoffDateString}`);
+    // CRITICAL FIX: Trust API filtering for all ranges
+    // The API already applies correct time-based filtering with proper pagination
+    // Client-side filtering caused data inconsistencies, especially for 24h, 7d, 30d ranges
+    console.log(`[PnL Chart] Using API-filtered data directly for ${timeRange} (no client-side filtering)`);
 
-      const beforeFilter = processedData.length;
-      processedData = processedData.filter(d => d.date >= cutoffDateString);
-
-      console.log(`[PnL Chart] After filtering: ${processedData.length} days (removed ${beforeFilter - processedData.length})`);
-    } else {
-      console.log(`[PnL Chart] No client-side filtering for ${timeRange} - using API-filtered data directly`);
-    }
+    // Note: The API handles all time ranges correctly:
+    // - 24h: Last 24 hours of income records
+    // - 7d: Last 7 days
+    // - 30d: Last 30 days
+    // - 90d: Last 90 days
+    // - 1y: Last 365 days
+    // - all: Last 2 years (with pagination to fetch all records)
 
     // Calculate cumulative PnL if needed
     if (chartType === 'cumulative') {
@@ -371,9 +369,17 @@ export default function PnLChart() {
             )}
           </div>
           {isDaily && (
-            <div className="flex gap-2 mt-1 text-[10px] text-muted-foreground">
-              <span>Real: {formatTooltipValue(data.realizedPnl)}</span>
-              <span>Fee: {formatTooltipValue(Math.abs(data.commission))}</span>
+            <div className="flex flex-col gap-0.5 mt-1 text-[10px] text-muted-foreground">
+              <div className="flex gap-2">
+                <span>Real: {formatTooltipValue(data.realizedPnl)}</span>
+                <span>Fee: {formatTooltipValue(data.commission + data.fundingFee)}</span>
+              </div>
+              {(data.insuranceClear !== 0 || data.marketMerchantReward !== 0) && (
+                <div className="flex gap-2">
+                  {data.insuranceClear !== 0 && <span>Ins: {formatTooltipValue(data.insuranceClear)}</span>}
+                  {data.marketMerchantReward !== 0 && <span>Reward: {formatTooltipValue(data.marketMerchantReward)}</span>}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -20,6 +20,8 @@ interface DailyPnL {
   fundingFee: number;
   insuranceClear: number;
   marketMerchantReward: number;
+  apolloxRebate: number;
+  usdfReward: number;
   netPnl: number;
   tradeCount: number;
 }
@@ -75,9 +77,13 @@ export default function IncomeBreakdownChart({ data, timeRange }: IncomeBreakdow
       'Commission': Math.abs(day.commission), // Show as positive for stacking
       'Funding Fee': day.fundingFee,
       'Insurance': day.insuranceClear || 0,
+      'Rebates': day.apolloxRebate || 0,
+      'USDF Rewards': day.usdfReward || 0,
       'Rewards': day.marketMerchantReward || 0,
       // Store original values for tooltip
       _originalCommission: day.commission,
+      _apolloxRebate: day.apolloxRebate || 0,
+      _usdfReward: day.usdfReward || 0,
       _netPnl: day.netPnl,
       _tradeCount: day.tradeCount,
     }));
@@ -130,6 +136,28 @@ export default function IncomeBreakdownChart({ data, timeRange }: IncomeBreakdow
                 </div>
                 <span className="text-xs font-semibold text-orange-600">
                   {formatCurrency(data['Insurance'])}
+                </span>
+              </div>
+            )}
+            {data['Rebates'] !== 0 && (
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-sm bg-yellow-500" />
+                  <span className="text-xs">Rebates</span>
+                </div>
+                <span className="text-xs font-semibold text-yellow-600">
+                  {formatCurrency(data['Rebates'])}
+                </span>
+              </div>
+            )}
+            {data['USDF Rewards'] !== 0 && (
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-sm bg-cyan-500" />
+                  <span className="text-xs">USDF Rewards</span>
+                </div>
+                <span className="text-xs font-semibold text-cyan-600">
+                  {formatCurrency(data['USDF Rewards'])}
                 </span>
               </div>
             )}
@@ -193,6 +221,8 @@ export default function IncomeBreakdownChart({ data, timeRange }: IncomeBreakdow
         <Bar dataKey="Realized PnL" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Funding Fee" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Insurance" stackId="a" fill="#f97316" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="Rebates" stackId="a" fill="#eab308" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="USDF Rewards" stackId="a" fill="#06b6d4" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Rewards" stackId="a" fill="#a855f7" radius={[4, 4, 0, 0]} />
         {/* Commission shown as negative overlay */}
         <Bar dataKey="Commission" fill="#ef4444" opacity={0.7} radius={[4, 4, 0, 0]} />

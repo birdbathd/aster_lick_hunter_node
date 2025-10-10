@@ -52,6 +52,8 @@ interface DailyPnL {
   fundingFee: number;
   insuranceClear: number;
   marketMerchantReward: number;
+  apolloxRebate: number;
+  usdfReward: number;
   netPnl: number;
   tradeCount: number;
   cumulativePnl?: number; // Optional field added when chartType is 'cumulative'
@@ -64,6 +66,8 @@ interface PerformanceMetrics {
   totalFundingFee: number;
   totalInsuranceClear: number;
   totalMarketMerchantReward: number;
+  totalApolloxRebate: number;
+  totalUsdfReward: number;
   winRate: number;
   profitableDays: number;
   lossDays: number;

@@ -477,7 +477,7 @@ export function aggregateBySymbol(records: IncomeRecord[]): SymbolPnL[] {
   const symbolTradeResults = new Map<string, Map<string, number>>();
 
   records.forEach(record => {
-    const symbol = record.symbol || 'UNKNOWN';
+    const symbol = record.symbol || 'Account Rewards';
     const amount = parseFloat(record.income);
 
     if (!symbolMap.has(symbol)) {
@@ -574,7 +574,7 @@ export async function aggregateBySymbolWithTrades(
 
   // First, initialize symbol data from income records (commission, funding, etc.)
   records.forEach(record => {
-    const symbol = record.symbol || 'UNKNOWN';
+    const symbol = record.symbol || 'Account Rewards';
     const amount = parseFloat(record.income);
 
     if (!symbolMap.has(symbol)) {

@@ -24,6 +24,8 @@ interface SymbolPnL {
   fundingFee: number;
   insuranceClear: number;
   marketMerchantReward: number;
+  apolloxRebate: number;
+  usdfReward: number;
   netPnl: number;
   winCount: number;
   lossCount: number;
@@ -232,10 +234,16 @@ export default function PerSymbolPerformanceTable({ timeRange }: PerSymbolPerfor
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedData.map((symbolPnl) => (
-              <TableRow key={symbolPnl.symbol}>
+            {sortedData.map((symbolPnl) => {
+              const isAccountRewards = symbolPnl.symbol === 'Account Rewards';
+              return (
+              <TableRow key={symbolPnl.symbol} className={isAccountRewards ? 'bg-yellow-50/50 dark:bg-yellow-950/20' : ''}>
                 <TableCell className="font-medium">
-                  <Badge variant="outline" className="font-mono">
+                  <Badge
+                    variant="outline"
+                    className={`font-mono ${isAccountRewards ? 'border-yellow-600 text-yellow-700 dark:border-yellow-500 dark:text-yellow-400' : ''}`}
+                    title={isAccountRewards ? 'Referral rebates and staking rewards (not tied to specific symbols)' : ''}
+                  >
                     {symbolPnl.symbol}
                   </Badge>
                 </TableCell>
@@ -282,7 +290,8 @@ export default function PerSymbolPerformanceTable({ timeRange }: PerSymbolPerfor
                   </span>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

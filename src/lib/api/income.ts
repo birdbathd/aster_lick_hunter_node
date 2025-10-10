@@ -1,6 +1,7 @@
 import { buildSignedQuery } from './auth';
 import { ApiCredentials } from '../types';
 import { getRateLimitedAxios } from './requestInterceptor';
+import { getUserTrades, type UserTrade } from './market';
 
 const BASE_URL = 'https://fapi.asterdex.com';
 
@@ -89,6 +90,31 @@ export interface DailyPnL {
   marketMerchantReward: number;
   netPnl: number;
   tradeCount: number;
+}
+
+export interface DailyPnLWithBreakdown extends DailyPnL {
+  // Preserve individual income type amounts for breakdown charts
+  breakdown: {
+    realizedPnl: number;
+    commission: number;
+    fundingFee: number;
+    insuranceClear: number;
+    marketMerchantReward: number;
+  };
+}
+
+export interface SymbolPnL {
+  symbol: string;
+  tradeCount: number;
+  realizedPnl: number;
+  commission: number;
+  fundingFee: number;
+  insuranceClear: number;
+  marketMerchantReward: number;
+  netPnl: number;
+  winCount: number;
+  lossCount: number;
+  winRate: number;
 }
 
 export function aggregateDailyPnL(records: IncomeRecord[]): DailyPnL[] {
@@ -413,4 +439,431 @@ export async function getTimeRangeIncome(
     console.error(`[Income API] Error fetching data for ${range}:`, error);
     return [];
   }
+}
+
+// Aggregate income records by symbol
+export function aggregateBySymbol(records: IncomeRecord[]): SymbolPnL[] {
+  const symbolMap = new Map<string, SymbolPnL>();
+
+  // Track unique trade IDs per symbol to count wins/losses
+  const symbolTradeResults = new Map<string, Map<string, number>>();
+
+  records.forEach(record => {
+    const symbol = record.symbol || 'UNKNOWN';
+    const amount = parseFloat(record.income);
+
+    if (!symbolMap.has(symbol)) {
+      symbolMap.set(symbol, {
+        symbol,
+        tradeCount: 0,
+        realizedPnl: 0,
+        commission: 0,
+        fundingFee: 0,
+        insuranceClear: 0,
+        marketMerchantReward: 0,
+        netPnl: 0,
+        winCount: 0,
+        lossCount: 0,
+        winRate: 0,
+      });
+      symbolTradeResults.set(symbol, new Map<string, number>());
+    }
+
+    const symbolData = symbolMap.get(symbol)!;
+    const tradeResults = symbolTradeResults.get(symbol)!;
+
+    switch (record.incomeType) {
+      case 'REALIZED_PNL':
+        symbolData.realizedPnl += amount;
+        // Track trade result by tradeId
+        if (record.tradeId) {
+          // Accumulate PnL for the same tradeId (in case of partial fills)
+          const currentPnL = tradeResults.get(record.tradeId) || 0;
+          tradeResults.set(record.tradeId, currentPnL + amount);
+        }
+        break;
+      case 'COMMISSION':
+        symbolData.commission += amount;
+        break;
+      case 'FUNDING_FEE':
+        symbolData.fundingFee += amount;
+        break;
+      case 'INSURANCE_CLEAR':
+        symbolData.insuranceClear += amount;
+        break;
+      case 'MARKET_MERCHANT_RETURN_REWARD':
+        symbolData.marketMerchantReward += amount;
+        break;
+    }
+  });
+
+  // Calculate win/loss counts and trade counts from unique trade results
+  symbolMap.forEach((symbolData, symbol) => {
+    const tradeResults = symbolTradeResults.get(symbol)!;
+    symbolData.tradeCount = tradeResults.size;
+
+    tradeResults.forEach(pnl => {
+      if (pnl > 0) {
+        symbolData.winCount++;
+      } else if (pnl < 0) {
+        symbolData.lossCount++;
+      }
+    });
+
+    // Calculate net PnL
+    symbolData.netPnl = symbolData.realizedPnl + symbolData.commission +
+                        symbolData.fundingFee + symbolData.insuranceClear +
+                        symbolData.marketMerchantReward;
+
+    // Calculate win rate
+    symbolData.winRate = symbolData.tradeCount > 0
+      ? (symbolData.winCount / symbolData.tradeCount) * 100
+      : 0;
+  });
+
+  // Sort by net PnL descending (most profitable first)
+  return Array.from(symbolMap.values()).sort((a, b) => b.netPnl - a.netPnl);
+}
+
+// NEW: Aggregate by symbol WITH REAL realized PnL from user trades
+export async function aggregateBySymbolWithTrades(
+  records: IncomeRecord[],
+  credentials: ApiCredentials,
+  symbols: string[],
+  startTime: number,
+  endTime: number
+): Promise<SymbolPnL[]> {
+  const symbolMap = new Map<string, SymbolPnL>();
+
+  // First, initialize symbol data from income records (commission, funding, etc.)
+  records.forEach(record => {
+    const symbol = record.symbol || 'UNKNOWN';
+    const amount = parseFloat(record.income);
+
+    if (!symbolMap.has(symbol)) {
+      symbolMap.set(symbol, {
+        symbol,
+        tradeCount: 0,
+        realizedPnl: 0,
+        commission: 0,
+        fundingFee: 0,
+        insuranceClear: 0,
+        marketMerchantReward: 0,
+        netPnl: 0,
+        winCount: 0,
+        lossCount: 0,
+        winRate: 0,
+      });
+    }
+
+    const symbolData = symbolMap.get(symbol)!;
+
+    switch (record.incomeType) {
+      case 'COMMISSION':
+        symbolData.commission += amount;
+        break;
+      case 'FUNDING_FEE':
+        symbolData.fundingFee += amount;
+        break;
+      case 'INSURANCE_CLEAR':
+        symbolData.insuranceClear += amount;
+        break;
+      case 'MARKET_MERCHANT_RETURN_REWARD':
+        symbolData.marketMerchantReward += amount;
+        break;
+    }
+  });
+
+  // Now fetch REAL realized PnL from user trades
+  console.log(`[Per-Symbol] Fetching trades for ${symbols.length} symbols...`);
+
+  // API limit: max 7 days per request
+  const CHUNK_DAYS = 7;
+  const CHUNK_MS = CHUNK_DAYS * 24 * 60 * 60 * 1000;
+
+  const totalDays = Math.ceil((endTime - startTime) / (24 * 60 * 60 * 1000));
+  const numChunks = Math.ceil(totalDays / CHUNK_DAYS);
+
+  // Fetch trades for each symbol, in 7-day chunks
+  for (const symbol of symbols) {
+    try {
+      const tradeResults = new Map<number, number>();
+
+      // Split into 7-day chunks (API maximum window)
+      for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
+        const chunkStart = startTime + (chunkIndex * CHUNK_MS);
+        const chunkEnd = Math.min(chunkStart + CHUNK_MS, endTime);
+
+        try {
+          const trades = await getUserTrades(symbol, credentials, {
+            startTime: chunkStart,
+            endTime: chunkEnd,
+            limit: 1000,
+          });
+
+          // Aggregate realized PnL and count wins/losses
+          trades.forEach(trade => {
+            const pnl = parseFloat(trade.realizedPnl);
+
+            // Only count each unique trade ID once
+            if (!tradeResults.has(trade.id)) {
+              tradeResults.set(trade.id, pnl);
+            }
+          });
+
+          // Small delay to avoid rate limiting between chunks
+          if (trades.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } catch (err) {
+          console.error(`[Per-Symbol] Error fetching ${symbol} chunk ${chunkIndex}:`, err);
+        }
+      }
+
+      // Update symbol data with trade results
+      if (!symbolMap.has(symbol)) {
+        symbolMap.set(symbol, {
+          symbol,
+          tradeCount: 0,
+          realizedPnl: 0,
+          commission: 0,
+          fundingFee: 0,
+          insuranceClear: 0,
+          marketMerchantReward: 0,
+          netPnl: 0,
+          winCount: 0,
+          lossCount: 0,
+          winRate: 0,
+        });
+      }
+
+      const symbolData = symbolMap.get(symbol)!;
+      symbolData.tradeCount = tradeResults.size;
+
+      tradeResults.forEach((pnl) => {
+        symbolData.realizedPnl += pnl;
+
+        if (pnl > 0) {
+          symbolData.winCount++;
+        } else if (pnl < 0) {
+          symbolData.lossCount++;
+        }
+      });
+
+      console.log(`[Per-Symbol] ${symbol}: ${symbolData.tradeCount} trades, $${symbolData.realizedPnl.toFixed(2)} realized PnL`);
+    } catch (err) {
+      console.error(`[Per-Symbol] Error fetching ${symbol}:`, err);
+    }
+  }
+
+  // Calculate final metrics for each symbol
+  symbolMap.forEach((symbolData) => {
+    // Calculate net PnL
+    symbolData.netPnl = symbolData.realizedPnl + symbolData.commission +
+                        symbolData.fundingFee + symbolData.insuranceClear +
+                        symbolData.marketMerchantReward;
+
+    // Calculate win rate
+    symbolData.winRate = symbolData.tradeCount > 0
+      ? (symbolData.winCount / symbolData.tradeCount) * 100
+      : 0;
+  });
+
+  // Sort by net PnL descending (most profitable first)
+  return Array.from(symbolMap.values()).sort((a, b) => b.netPnl - a.netPnl);
+}
+
+// NEW: Fetch user trades with REAL realized PnL for all symbols (in 7-day chunks per API limit)
+export async function getRealizedPnLFromTrades(
+  credentials: ApiCredentials,
+  symbols: string[],
+  startTime: number,
+  endTime: number
+): Promise<Map<string, { date: string; realizedPnl: number; tradeCount: number }[]>> {
+  const dailyPnLByDate = new Map<string, Map<string, { realizedPnl: number; tradeCount: number; tradeIds: Set<number> }>>();
+
+  console.log(`[Trade PnL] Fetching trades for ${symbols.length} symbols in 7-day chunks...`);
+
+  // API limit: max 7 days per request
+  const CHUNK_DAYS = 7;
+  const CHUNK_MS = CHUNK_DAYS * 24 * 60 * 60 * 1000;
+
+  const totalDays = Math.ceil((endTime - startTime) / (24 * 60 * 60 * 1000));
+  const numChunks = Math.ceil(totalDays / CHUNK_DAYS);
+  console.log(`[Trade PnL] Time range: ${totalDays} days (${numChunks} chunks of ${CHUNK_DAYS} days)`);
+
+  // Fetch trades for each symbol, in 7-day chunks
+  for (const symbol of symbols) {
+    console.log(`[Trade PnL] Fetching ${symbol}...`);
+
+    let symbolTotalTrades = 0;
+
+    try {
+      // Split into 7-day chunks (API maximum window)
+      for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
+        const chunkStart = startTime + (chunkIndex * CHUNK_MS);
+        const chunkEnd = Math.min(chunkStart + CHUNK_MS, endTime);
+
+        try {
+          const trades = await getUserTrades(symbol, credentials, {
+            startTime: chunkStart,
+            endTime: chunkEnd,
+            limit: 1000,
+          });
+
+          symbolTotalTrades += trades.length;
+
+          // Aggregate by date
+          trades.forEach(trade => {
+            const date = new Date(trade.time);
+            const dateStr = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+
+            if (!dailyPnLByDate.has(dateStr)) {
+              dailyPnLByDate.set(dateStr, new Map());
+            }
+
+            const dayData = dailyPnLByDate.get(dateStr)!;
+
+            if (!dayData.has(symbol)) {
+              dayData.set(symbol, {
+                realizedPnl: 0,
+                tradeCount: 0,
+                tradeIds: new Set(),
+              });
+            }
+
+            const symbolDayData = dayData.get(symbol)!;
+
+            // Only count each unique trade ID once
+            if (!symbolDayData.tradeIds.has(trade.id)) {
+              symbolDayData.realizedPnl += parseFloat(trade.realizedPnl);
+              symbolDayData.tradeCount++;
+              symbolDayData.tradeIds.add(trade.id);
+            }
+          });
+
+          // Small delay to avoid rate limiting between chunks
+          if (trades.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } catch (chunkError) {
+          console.error(`[Trade PnL] Error fetching ${symbol} chunk ${chunkIndex}:`, chunkError);
+        }
+      }
+
+      console.log(`[Trade PnL] ${symbol}: ${symbolTotalTrades} total trades`);
+    } catch (error) {
+      console.error(`[Trade PnL] Error fetching trades for ${symbol}:`, error);
+    }
+  }
+
+  // Convert to final structure
+  const result = new Map<string, { date: string; realizedPnl: number; tradeCount: number }[]>();
+
+  dailyPnLByDate.forEach((dayData, date) => {
+    const dayArray: { date: string; realizedPnl: number; tradeCount: number }[] = [];
+
+    dayData.forEach((data, symbol) => {
+      dayArray.push({
+        date,
+        realizedPnl: data.realizedPnl,
+        tradeCount: data.tradeCount,
+      });
+    });
+
+    result.set(date, dayArray);
+  });
+
+  console.log(`[Trade PnL] Aggregated ${dailyPnLByDate.size} days with trade data`);
+
+  return result;
+}
+
+// UPDATED: Enhanced aggregation that includes REAL realized PnL from trades
+export async function aggregateDailyPnLWithTrades(
+  records: IncomeRecord[],
+  credentials: ApiCredentials,
+  symbols: string[],
+  startTime: number,
+  endTime: number
+): Promise<DailyPnL[]> {
+  // First, get traditional income data (commission, funding, etc.)
+  const dailyMap = new Map<string, DailyPnL>();
+
+  records.forEach(record => {
+    const d = new Date(record.time);
+    const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+    if (!dailyMap.has(date)) {
+      dailyMap.set(date, {
+        date,
+        realizedPnl: 0,
+        commission: 0,
+        fundingFee: 0,
+        insuranceClear: 0,
+        marketMerchantReward: 0,
+        netPnl: 0,
+        tradeCount: 0,
+      });
+    }
+
+    const daily = dailyMap.get(date)!;
+    const amount = parseFloat(record.income);
+
+    switch (record.incomeType) {
+      case 'COMMISSION':
+        daily.commission += amount;
+        break;
+      case 'FUNDING_FEE':
+        daily.fundingFee += amount;
+        break;
+      case 'INSURANCE_CLEAR':
+        daily.insuranceClear += amount;
+        break;
+      case 'MARKET_MERCHANT_RETURN_REWARD':
+        daily.marketMerchantReward += amount;
+        break;
+    }
+  });
+
+  // Now fetch REAL realized PnL from user trades
+  const tradePnLByDate = await getRealizedPnLFromTrades(credentials, symbols, startTime, endTime);
+
+  // Merge trade PnL into daily data
+  tradePnLByDate.forEach((dayTrades, date) => {
+    if (!dailyMap.has(date)) {
+      dailyMap.set(date, {
+        date,
+        realizedPnl: 0,
+        commission: 0,
+        fundingFee: 0,
+        insuranceClear: 0,
+        marketMerchantReward: 0,
+        netPnl: 0,
+        tradeCount: 0,
+      });
+    }
+
+    const daily = dailyMap.get(date)!;
+
+    // Sum up realized PnL and trade counts from all symbols for this day
+    dayTrades.forEach(symbolData => {
+      daily.realizedPnl += symbolData.realizedPnl;
+      daily.tradeCount += symbolData.tradeCount;
+    });
+  });
+
+  // Calculate net PnL for each day
+  dailyMap.forEach(daily => {
+    daily.netPnl = daily.realizedPnl + daily.commission + daily.fundingFee +
+                   daily.insuranceClear + daily.marketMerchantReward;
+  });
+
+  const result = Array.from(dailyMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
+  console.log(`[Trade PnL] Final aggregation: ${result.length} days with realized PnL data`);
+
+  return result;
 }

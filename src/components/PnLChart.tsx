@@ -38,9 +38,11 @@ import {
 } from 'lucide-react';
 import websocketService from '@/lib/services/websocketService';
 import { useConfig } from '@/components/ConfigProvider';
+import IncomeBreakdownChart from '@/components/IncomeBreakdownChart';
+import PerSymbolPerformanceTable from '@/components/PerSymbolPerformanceTable';
 
 type TimeRange = '24h' | '7d' | '30d' | '90d' | '1y' | 'all';
-type ChartType = 'daily' | 'cumulative';
+type ChartType = 'daily' | 'cumulative' | 'breakdown' | 'symbols';
 type DisplayMode = 'usdt' | 'percent';
 
 interface DailyPnL {
@@ -567,6 +569,8 @@ export default function PnLChart() {
                 <TabsList className="h-7">
                   <TabsTrigger value="daily" className="h-6 text-xs">Daily</TabsTrigger>
                   <TabsTrigger value="cumulative" className="h-6 text-xs">Total</TabsTrigger>
+                  <TabsTrigger value="breakdown" className="h-6 text-xs">Breakdown</TabsTrigger>
+                  <TabsTrigger value="symbols" className="h-6 text-xs">Per Symbol</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -643,53 +647,59 @@ export default function PnLChart() {
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           )}
-          <ResponsiveContainer width="100%" height={200}>
-            {chartType === 'daily' ? (
-            <BarChart data={chartData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10 }}
-                tickFormatter={formatDateTick}
-                padding={{ left: 10, right: 10 }}
-                interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
-                minTickGap={chartData.length <= 10 ? 10 : 20}
-              />
-              <YAxis tick={{ fontSize: 10 }} width={40} />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={0} stroke="#666" />
-              <Bar
-                dataKey="netPnl"
-                radius={[4, 4, 0, 0]}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.netPnl >= 0 ? '#10b981' : '#ef4444'} />
-                ))}
-              </Bar>
-            </BarChart>
+          {chartType === 'breakdown' ? (
+            <IncomeBreakdownChart data={pnlData?.dailyPnL || []} timeRange={timeRange} />
+          ) : chartType === 'symbols' ? (
+            <PerSymbolPerformanceTable timeRange={timeRange} />
           ) : (
-            <AreaChart data={chartData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10 }}
-                tickFormatter={formatDateTick}
-                interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
-                minTickGap={chartData.length <= 10 ? 10 : 20}
-              />
-              <YAxis tick={{ fontSize: 10 }} width={40} />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={0} stroke="#666" />
-              <Area
-                type="monotone"
-                dataKey="cumulativePnl"
-                stroke={chartData.length > 0 && (chartData[chartData.length - 1].cumulativePnl ?? 0) >= 0 ? "#10b981" : "#ef4444"}
-                fill={chartData.length > 0 && (chartData[chartData.length - 1].cumulativePnl ?? 0) >= 0 ? "#10b98140" : "#ef444440"}
-                strokeWidth={2}
-              />
-            </AreaChart>
+            <ResponsiveContainer width="100%" height={200}>
+              {chartType === 'daily' ? (
+              <BarChart data={chartData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={formatDateTick}
+                  padding={{ left: 10, right: 10 }}
+                  interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
+                  minTickGap={chartData.length <= 10 ? 10 : 20}
+                />
+                <YAxis tick={{ fontSize: 10 }} width={40} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={0} stroke="#666" />
+                <Bar
+                  dataKey="netPnl"
+                  radius={[4, 4, 0, 0]}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.netPnl >= 0 ? '#10b981' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            ) : (
+              <AreaChart data={chartData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={formatDateTick}
+                  interval={chartData.length <= 5 ? 0 : chartData.length <= 20 ? 'preserveStartEnd' : 'preserveStart'}
+                  minTickGap={chartData.length <= 10 ? 10 : 20}
+                />
+                <YAxis tick={{ fontSize: 10 }} width={40} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={0} stroke="#666" />
+                <Area
+                  type="monotone"
+                  dataKey="cumulativePnl"
+                  stroke={chartData.length > 0 && (chartData[chartData.length - 1].cumulativePnl ?? 0) >= 0 ? "#10b981" : "#ef4444"}
+                  fill={chartData.length > 0 && (chartData[chartData.length - 1].cumulativePnl ?? 0) >= 0 ? "#10b98140" : "#ef444440"}
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            )}
+          </ResponsiveContainer>
           )}
-        </ResponsiveContainer>
         </div>
 
         {/* Additional Metrics - Inline badges */}

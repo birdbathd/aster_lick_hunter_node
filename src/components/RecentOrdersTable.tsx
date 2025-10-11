@@ -39,8 +39,8 @@ interface RecentOrdersTableProps {
   maxRows?: number;
 }
 
-export default function RecentOrdersTable({ maxRows = 50 }: RecentOrdersTableProps) {
-  const { config } = useConfig();
+export default function RecentOrdersTable({ maxRows: _maxRows = 50 }: RecentOrdersTableProps) {
+  const { config: _config } = useConfig();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);

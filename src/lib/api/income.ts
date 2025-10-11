@@ -1,7 +1,7 @@
 import { buildSignedQuery } from './auth';
 import { ApiCredentials } from '../types';
 import { getRateLimitedAxios } from './requestInterceptor';
-import { getUserTrades, type UserTrade } from './market';
+import { getUserTrades } from './market';
 
 const BASE_URL = 'https://fapi.asterdex.com';
 
@@ -811,7 +811,7 @@ export async function getRealizedPnLFromTrades(
   dailyPnLByDate.forEach((dayData, date) => {
     const dayArray: { date: string; realizedPnl: number; tradeCount: number }[] = [];
 
-    dayData.forEach((data, symbol) => {
+    dayData.forEach((data, _symbol) => {
       dayArray.push({
         date,
         realizedPnl: data.realizedPnl,

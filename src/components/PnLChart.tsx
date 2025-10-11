@@ -235,7 +235,7 @@ export default function PnLChart() {
     console.log(`[PnL Chart] - Session data available: ${!!realtimePnL?.session}`);
 
     const today = new Date().toISOString().split('T')[0];
-    let processedData = [...pnlData.dailyPnL];
+    const processedData = [...pnlData.dailyPnL];
 
     // Log initial data state
     const todayInHistorical = processedData.find(d => d.date === today);

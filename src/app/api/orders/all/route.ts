@@ -21,7 +21,29 @@ export async function GET(request: NextRequest) {
     const force = searchParams.get('force') === 'true';
 
     // Get configured/active symbols only
-    const configuredSymbols = config.symbols ? Object.keys(config.symbols) : [];
+    let configuredSymbols = config.symbols ? Object.keys(config.symbols) : [];
+
+    // If no symbols configured, try to get symbols from recent income history
+    if (configuredSymbols.length === 0 && !symbol) {
+      try {
+        const { getIncomeHistory } = await import('@/lib/api/income');
+        const recentIncome = await getIncomeHistory(config.api, {
+          startTime: Date.now() - 30 * 24 * 60 * 60 * 1000, // Last 30 days
+          limit: 1000,
+        });
+        // Extract unique symbols from income records
+        const symbolSet = new Set<string>();
+        recentIncome.forEach(record => {
+          if (record.symbol && record.symbol !== '') {
+            symbolSet.add(record.symbol);
+          }
+        });
+        configuredSymbols = Array.from(symbolSet);
+        console.log(`[Orders API] No configured symbols, discovered ${configuredSymbols.length} symbols from income history:`, configuredSymbols);
+      } catch (err) {
+        console.error('[Orders API] Failed to fetch income history for symbol discovery:', err);
+      }
+    }
 
     // Determine which symbol to fetch - use provided symbol or first configured symbol
     const fetchSymbol = symbol || (configuredSymbols.length > 0 ? configuredSymbols[0] : 'BTCUSDT');

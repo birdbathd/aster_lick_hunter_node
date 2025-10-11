@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100');
     const force = searchParams.get('force') === 'true';
 
-    // Get configured symbols
+    // Get configured/active symbols only
     const configuredSymbols = config.symbols ? Object.keys(config.symbols) : [];
 
     // Determine which symbol to fetch - use provided symbol or first configured symbol
@@ -38,8 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // Fetch orders from exchange - we can only fetch one symbol at a time from the API
-      // So we'll fetch for the requested symbol or iterate through configured symbols
+      // Fetch orders from exchange - only from configured/active symbols
       let allOrders: any[] = [];
 
       if (symbol && symbol !== 'ALL') {
@@ -53,17 +52,20 @@ export async function GET(request: NextRequest) {
         );
         allOrders = orders;
       } else if (configuredSymbols.length > 0) {
-        // Fetch for all configured symbols
-        const symbolsToFetch = configuredSymbols; // Fetch all configured symbols
+        // Fetch for all configured/active symbols
+        console.log(`[Orders API] Fetching orders from ${configuredSymbols.length} configured symbols...`);
 
-        for (const sym of symbolsToFetch) {
+        // Calculate per-symbol limit
+        const perSymbolLimit = Math.max(50, Math.ceil((limit * 1.5) / configuredSymbols.length));
+
+        for (const sym of configuredSymbols) {
           try {
             const orders = await getAllOrders(
               sym,
               config.api,
               startTime ? parseInt(startTime) : undefined,
               endTime ? parseInt(endTime) : undefined,
-              Math.min(limit, 200) // Limit per symbol when fetching multiple
+              Math.min(perSymbolLimit, 500)
             );
             allOrders = allOrders.concat(orders);
           } catch (err) {
@@ -104,9 +106,7 @@ export async function GET(request: NextRequest) {
         }
       } else if (configuredSymbols.length > 0) {
         // Fetch trades for all configured symbols
-        const symbolsToFetch = configuredSymbols;
-
-        for (const sym of symbolsToFetch) {
+        for (const sym of configuredSymbols) {
           try {
             const trades = await getUserTrades(sym, config.api, {
               startTime: startTime ? parseInt(startTime) : Date.now() - 7 * 24 * 60 * 60 * 1000,

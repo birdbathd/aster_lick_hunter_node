@@ -668,7 +668,7 @@ function generateSlCandidates(volStats, currentSl) {
     ? [currentSl, currentSl * 0.5, currentSl * 0.75, currentSl * 1.25, currentSl * 1.5, currentSl * 2, currentSl * 3]
     : [];
 
-  const general = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5]; // trimmed: 10, 12.5, 15, 20, 25, 30, 35, 40
+  const general = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20, 25, 30, 35, 40, 45, 50];
   const dynamic = [
     base * 0.5,
     base * 0.75,
@@ -684,7 +684,7 @@ function generateSlCandidates(volStats, currentSl) {
     .filter(val => typeof val === 'number' && val > 0.1 && val <= 80);
 
   const candidates = sampleCandidates(rawCandidates, 15)
-    .filter(val => val >= 0.1 && val <= 40);  // Basic sanity bounds only
+    .filter(val => val >= 0.1 && val <= 50);  // Basic sanity bounds only
 
   return candidates;
 }
@@ -869,9 +869,15 @@ async function optimizeSymbolParameters(symbol, symbolConfig, capitalBudget, spa
 
           const combinedPnl = bestLongSide.result.totalPnl + bestShortSide.result.totalPnl;
           const stopExitCount = (bestLongSide.result.exitReasons?.SL || 0) + (bestShortSide.result.exitReasons?.SL || 0);
+          const liquidationCount = (bestLongSide.result.exitReasons?.LIQUIDATED || 0) + (bestShortSide.result.exitReasons?.LIQUIDATED || 0);
           const totalTrades = (bestLongSide.result.totalTrades || 0) + (bestShortSide.result.totalTrades || 0);
           const stopRate = totalTrades > 0 ? stopExitCount / totalTrades : 0;
           const combinedProfitFactor = ((bestLongSide.result.profitFactor || 0) + (bestShortSide.result.profitFactor || 0)) / 2;
+
+          // CRITICAL: Reject ANY combination that resulted in liquidations
+          if (liquidationCount > 0) {
+            continue;  // Zero tolerance for liquidations - these configs are unsafe
+          }
 
           // Skip combinations with poor profit factor or excessive stop rate
           if (combinedProfitFactor < 1.05 || stopRate > 0.65) {
@@ -1448,6 +1454,37 @@ async function backtestSymbol(symbol, side, threshold, maxPositions, tradeSize, 
   };
 
   const recordExit = (pos, exitPrice, exitReason, priceEventTime, volatilityFactor = 1.0) => {
+    // Handle liquidation specially - 100% margin loss
+    if (exitReason === 'LIQUIDATED') {
+      const notional = tradeSize * leverage;
+      const entryCommission = notional * (COMMISSION.MAKER_FEE * 0.9 + COMMISSION.TAKER_FEE * 0.1);
+
+      // Liquidation fee is typically 0.5% of position value on most exchanges
+      const liquidationFee = notional * 0.005;
+
+      // Total loss = entire margin + entry commission + liquidation fee
+      const netPnl = -(tradeSize + entryCommission + liquidationFee);
+
+      totalPnl += netPnl;
+      completedTrades.push({
+        symbol,
+        side: pos.isLong ? 'LONG' : 'SHORT',
+        entryPrice: pos.entryPrice,
+        exitPrice: exitPrice,
+        triggerPrice: exitPrice,
+        slippage: 0,
+        grossPnl: netPnl,
+        commission: entryCommission + liquidationFee,
+        pnl: netPnl,
+        exitReason,
+        duration: priceEventTime - pos.entryTime,
+        margin: tradeSize,
+        leverage: pos.leverage,
+        volatilityFactor: null
+      });
+      return;
+    }
+
     // Apply realistic slippage based on order type and market conditions
     let actualExitPrice = exitPrice;
 
@@ -1511,7 +1548,21 @@ async function backtestSymbol(symbol, side, threshold, maxPositions, tradeSize, 
       let exitReason = null;
       let exitPrice = null;
 
-      // Check if both TP and SL were touched in this candle
+      // PRIORITY 1: Check liquidation FIRST (happens before TP/SL can trigger)
+      const liquidationTouched = pos.isLong
+        ? priceBar.low <= pos.liquidationPrice
+        : priceBar.high >= pos.liquidationPrice;
+
+      if (liquidationTouched) {
+        // Position liquidated - exit at liquidation price with total margin loss
+        shouldExit = true;
+        exitReason = 'LIQUIDATED';
+        exitPrice = pos.liquidationPrice;
+        recordExit(pos, exitPrice, exitReason, priceBar.event_time, volatilityFactor);
+        return false;
+      }
+
+      // PRIORITY 2: Check if both TP and SL were touched in this candle
       const tpTouched = pos.isLong ? priceBar.high >= pos.tpPrice : priceBar.low <= pos.tpPrice;
       const slTouched = pos.isLong ? priceBar.low <= pos.slPrice : priceBar.high >= pos.slPrice;
 
@@ -1620,13 +1671,23 @@ async function backtestSymbol(symbol, side, threshold, maxPositions, tradeSize, 
         ? entryPrice * (1 - slPercent/100)
         : entryPrice * (1 + slPercent/100);
 
+      // Calculate liquidation price based on leverage
+      // Liquidation happens at approximately (100 / leverage)% price move from entry
+      // Using 95% of theoretical distance to account for maintenance margin and fees
+      const liquidationDistance = (100 / leverage) * 0.95;
+      const liquidationPrice = isLong
+        ? entryPrice * (1 - liquidationDistance/100)
+        : entryPrice * (1 + liquidationDistance/100);
+
       activePositions.push({
         entryPrice,
         entryTime: currentTime,
         tpPrice,
         slPrice,
+        liquidationPrice,
         isLong,
-        size: tradeSize * leverage / entryPrice
+        size: tradeSize * leverage / entryPrice,
+        leverage
       });
       lastEntryTime = currentTime;
       lastHunterEntryTime = currentTime;
@@ -1666,6 +1727,14 @@ async function backtestSymbol(symbol, side, threshold, maxPositions, tradeSize, 
   const avgLoss = losses > 0 ? completedTrades.filter(t => t.pnl < 0).reduce((sum, t) => sum + t.pnl, 0) / losses : 0;
   const avgDuration = completedTrades.length > 0 ? completedTrades.reduce((sum, t) => sum + t.duration, 0) / completedTrades.length / 1000 / 60 : 0; // minutes
 
+  // Calculate exit reason breakdown
+  const exitReasons = {
+    TP: completedTrades.filter(t => t.exitReason === 'TP').length,
+    SL: completedTrades.filter(t => t.exitReason === 'SL').length,
+    EOD: completedTrades.filter(t => t.exitReason === 'EOD').length,
+    LIQUIDATED: completedTrades.filter(t => t.exitReason === 'LIQUIDATED').length
+  };
+
   // Calculate risk metrics
   const riskMetrics = calculateRiskMetrics(completedTrades);
 
@@ -1680,6 +1749,7 @@ async function backtestSymbol(symbol, side, threshold, maxPositions, tradeSize, 
     avgDuration,
     activePositions: activePositions.length,
     recentTrades: completedTrades.slice(-3),
+    exitReasons,
     ...riskMetrics
   };
 }

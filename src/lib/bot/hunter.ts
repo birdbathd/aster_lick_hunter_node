@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { Config, LiquidationEvent, SymbolConfig } from '../types';
-import { getMarkPrice, getExchangeInfo } from '../api/market';
+import { getMarkPrice, getExchangeInfo, getAccountInfo } from '../api/market';
 import { placeOrder, setLeverage } from '../api/orders';
 import { calculateOptimalPrice, validateOrderParams, analyzeOrderBookDepth, getSymbolFilters } from '../api/pricing';
 import { getPositionSide, getPositionMode } from '../api/positionMode';
@@ -699,6 +699,65 @@ export class Hunter extends EventEmitter {
             console.log(`Hunter: Skipping trade - would exceed max margin for ${symbol} (${totalMargin.toFixed(2)}/${symbolConfig.maxPositionMarginUSDT} USDT)`);
             return;
           }
+        }
+
+        // Check available margin from exchange to prevent insufficient balance errors
+        try {
+          const accountInfo = await getAccountInfo(this.config.api);
+          const totalBalance = parseFloat(accountInfo.totalWalletBalance || '0');
+          const availableBalance = parseFloat(accountInfo.availableBalance || '0');
+          const usedMargin = totalBalance - availableBalance;
+
+          // Use direction-specific trade size if available
+          const requiredMargin = side === 'BUY'
+            ? (symbolConfig.longTradeSize ?? symbolConfig.tradeSize)
+            : (symbolConfig.shortTradeSize ?? symbolConfig.tradeSize);
+
+          console.log(`Hunter: Available margin check for ${symbol}`);
+          console.log(`  Total balance: ${totalBalance.toFixed(2)} USDT`);
+          console.log(`  Used margin: ${usedMargin.toFixed(2)} USDT`);
+          console.log(`  Available: ${availableBalance.toFixed(2)} USDT`);
+          console.log(`  Required for this trade: ${requiredMargin.toFixed(2)} USDT`);
+
+          if (availableBalance < requiredMargin) {
+            const deficit = requiredMargin - availableBalance;
+            console.warn(`Hunter: INSUFFICIENT AVAILABLE MARGIN for ${symbol}`);
+            console.warn(`  Available: ${availableBalance.toFixed(2)} USDT`);
+            console.warn(`  Required: ${requiredMargin.toFixed(2)} USDT`);
+            console.warn(`  Deficit: ${deficit.toFixed(2)} USDT`);
+            console.warn(`  Reason: ${usedMargin.toFixed(2)} USDT is locked in ${currentPositionCount} existing positions`);
+
+            // Broadcast detailed error to UI
+            if (this.statusBroadcaster) {
+              this.statusBroadcaster.broadcastTradingError(
+                `Insufficient Available Margin - ${symbol}`,
+                `Cannot open new position: ${availableBalance.toFixed(2)} USDT available, ${requiredMargin.toFixed(2)} USDT required`,
+                {
+                  component: 'Hunter',
+                  symbol,
+                  details: {
+                    totalBalance: totalBalance.toFixed(2),
+                    usedMargin: usedMargin.toFixed(2),
+                    availableBalance: availableBalance.toFixed(2),
+                    requiredMargin: requiredMargin.toFixed(2),
+                    deficit: deficit.toFixed(2),
+                    currentPositions: currentPositionCount,
+                    suggestion: usedMargin > 0
+                      ? `${usedMargin.toFixed(2)} USDT is locked in ${currentPositionCount} open positions. Wait for positions to close or reduce trade sizes.`
+                      : 'Add more funds to your account or reduce trade sizes.'
+                  }
+                }
+              );
+            }
+
+            return; // Block the trade
+          }
+
+          console.log(`Hunter: ✓ Available margin check passed - ${availableBalance.toFixed(2)} USDT available, ${requiredMargin.toFixed(2)} USDT required`);
+        } catch (marginCheckError) {
+          console.warn(`Hunter: Failed to check available margin for ${symbol}:`, marginCheckError);
+          console.warn(`Hunter: Proceeding with trade anyway - exchange will reject if insufficient balance`);
+          // Don't block the trade on margin check failure - let the exchange handle it
         }
       }
 

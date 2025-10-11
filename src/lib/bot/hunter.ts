@@ -125,6 +125,23 @@ export class Hunter extends EventEmitter {
             oldSym.shortVolumeThresholdUSDT !== newSym.shortVolumeThresholdUSDT) {
           console.log(`Hunter: ${symbol} volume thresholds updated`);
         }
+
+        // Log threshold system configuration changes
+        if (oldSym.useThreshold !== newSym.useThreshold) {
+          console.log(`Hunter: ${symbol} threshold system ${newSym.useThreshold ? 'ENABLED' : 'DISABLED'}`);
+        }
+
+        if (oldSym.thresholdCooldown !== newSym.thresholdCooldown) {
+          const oldCooldownSec = (oldSym.thresholdCooldown || 30000) / 1000;
+          const newCooldownSec = (newSym.thresholdCooldown || 30000) / 1000;
+          console.log(`Hunter: ${symbol} threshold cooldown updated: ${oldCooldownSec}s → ${newCooldownSec}s`);
+        }
+
+        if (oldSym.thresholdTimeWindow !== newSym.thresholdTimeWindow) {
+          const oldWindowSec = (oldSym.thresholdTimeWindow || 60000) / 1000;
+          const newWindowSec = (newSym.thresholdTimeWindow || 60000) / 1000;
+          console.log(`Hunter: ${symbol} threshold time window updated: ${oldWindowSec}s → ${newWindowSec}s`);
+        }
       }
     }
   }
@@ -239,6 +256,20 @@ export class Hunter extends EventEmitter {
   async start(): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
+
+    // Log threshold system configuration on startup
+    if (this.config.global.useThresholdSystem) {
+      console.log('Hunter: Global threshold system ENABLED');
+      Object.entries(this.config.symbols).forEach(([symbol, config]) => {
+        if (config.useThreshold) {
+          const cooldownSec = (config.thresholdCooldown || 30000) / 1000;
+          const windowSec = (config.thresholdTimeWindow || 60000) / 1000;
+          console.log(`Hunter: ${symbol} - Threshold system active (cooldown: ${cooldownSec}s, window: ${windowSec}s)`);
+        }
+      });
+    } else {
+      console.log('Hunter: Global threshold system DISABLED - using instant triggers');
+    }
 
     // Sync position mode on startup
     await this.syncPositionMode();
@@ -470,13 +501,16 @@ export class Hunter extends EventEmitter {
         const lastTradeTime = tradeSide === 'BUY' ? symbolTrades.long : symbolTrades.short;
         const timeSinceLastTrade = now - lastTradeTime;
 
+        // Enhanced logging for cooldown configuration
+        console.log(`Hunter: Cooldown check for ${liquidation.symbol} ${tradeSide} - configured: ${cooldownPeriod}ms (${(cooldownPeriod / 1000).toFixed(0)}s), time since last trade: ${(timeSinceLastTrade / 1000).toFixed(1)}s`);
+
         if (timeSinceLastTrade < cooldownPeriod) {
           const remainingCooldown = Math.ceil((cooldownPeriod - timeSinceLastTrade) / 1000);
-          console.log(`Hunter: ${tradeSide} trade cooldown active for ${liquidation.symbol} - ${remainingCooldown}s remaining`);
+          console.log(`Hunter: ${tradeSide} trade cooldown active for ${liquidation.symbol} - ${remainingCooldown}s remaining (cooldown period: ${(cooldownPeriod / 1000).toFixed(0)}s)`);
           return;
         }
 
-        console.log(`Hunter: Triggering ${tradeSide} trade for ${liquidation.symbol} based on 60s cumulative volume`);
+        console.log(`Hunter: ✓ Cooldown passed - Triggering ${tradeSide} trade for ${liquidation.symbol} based on 60s cumulative volume (cooldown: ${(cooldownPeriod / 1000).toFixed(0)}s)`);
 
         // Update last trade timestamp
         if (tradeSide === 'BUY') {
@@ -501,6 +535,34 @@ export class Hunter extends EventEmitter {
       if (volumeUSDT < thresholdToCheck) return; // Too small
 
       console.log(`Hunter: Liquidation detected - ${liquidation.symbol} ${liquidation.side} ${volumeUSDT.toFixed(2)} USDT`);
+
+      // Check cooldown for instant trigger system (apply same cooldown logic as threshold system)
+      const tradeSide = liquidation.side === 'SELL' ? 'BUY' : 'SELL';
+      const now = Date.now();
+      const cooldownPeriod = symbolConfig.thresholdCooldown || 30000; // Use same cooldown setting
+      const symbolTrades = this.lastTradeTimestamps.get(liquidation.symbol) || { long: 0, short: 0 };
+
+      const lastTradeTime = tradeSide === 'BUY' ? symbolTrades.long : symbolTrades.short;
+      const timeSinceLastTrade = now - lastTradeTime;
+
+      // Enhanced logging for cooldown configuration
+      console.log(`Hunter: Cooldown check for ${liquidation.symbol} ${tradeSide} (instant trigger) - configured: ${cooldownPeriod}ms (${(cooldownPeriod / 1000).toFixed(0)}s), time since last trade: ${(timeSinceLastTrade / 1000).toFixed(1)}s`);
+
+      if (timeSinceLastTrade < cooldownPeriod) {
+        const remainingCooldown = Math.ceil((cooldownPeriod - timeSinceLastTrade) / 1000);
+        console.log(`Hunter: ${tradeSide} trade cooldown active for ${liquidation.symbol} - ${remainingCooldown}s remaining (cooldown period: ${(cooldownPeriod / 1000).toFixed(0)}s)`);
+        return;
+      }
+
+      console.log(`Hunter: ✓ Cooldown passed - Triggering ${tradeSide} trade for ${liquidation.symbol} (instant trigger, cooldown: ${(cooldownPeriod / 1000).toFixed(0)}s)`);
+
+      // Update last trade timestamp
+      if (tradeSide === 'BUY') {
+        symbolTrades.long = now;
+      } else {
+        symbolTrades.short = now;
+      }
+      this.lastTradeTimestamps.set(liquidation.symbol, symbolTrades);
 
       // Analyze and trade with instant trigger
       await this.analyzeAndTrade(liquidation, symbolConfig);

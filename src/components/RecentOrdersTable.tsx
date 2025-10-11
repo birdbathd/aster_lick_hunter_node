@@ -74,16 +74,41 @@ export default function RecentOrdersTable({ maxRows = 50 }: RecentOrdersTablePro
 
       const limitToUse = isLoadMore ? currentLimit + LOAD_MORE_INCREMENT : 50;
 
+      // Handle REDUCE filter separately - it's a custom filter, not a real order status
+      // For REDUCE filter, we need to fetch FILLED orders and then filter client-side
+      const actualStatusFilter = statusFilter === 'REDUCE' ? 'FILLED' : statusFilter;
+
       // Set filters in store
       orderStore.setFilters({
-        status: statusFilter === 'ALL' ? undefined : statusFilter as OrderStatus,
+        status: actualStatusFilter === 'ALL' ? undefined : actualStatusFilter as OrderStatus,
         symbol: symbolFilter === 'ALL' ? undefined : symbolFilter,
         limit: limitToUse,
       });
 
       // Fetch orders
       await orderStore.fetchOrders(force);
-      const filteredOrders = orderStore.getFilteredOrders();
+      let filteredOrders = orderStore.getFilteredOrders();
+
+      // If REDUCE filter is active, filter to only reduce-only orders
+      if (statusFilter === 'REDUCE') {
+        filteredOrders = filteredOrders.filter(order => {
+          // Check if this is a reduce-only order (closing/reducing position)
+          const hasRealizedPnL = order.realizedProfit !== undefined &&
+                                 order.realizedProfit !== null &&
+                                 order.realizedProfit !== '' &&
+                                 order.realizedProfit !== '0';
+
+          // Check if it's a reduce-only order or SL/TP type
+          const isReduceOrder = order.reduceOnly ||
+                               order.type === OrderType.STOP_MARKET ||
+                               order.type === OrderType.TAKE_PROFIT_MARKET ||
+                               order.type === 'STOP' ||
+                               order.type === 'TAKE_PROFIT' ||
+                               order.closePosition;
+
+          return hasRealizedPnL || isReduceOrder;
+        });
+      }
 
       // Show orders from all symbols, not just configured ones
       setOrders(filteredOrders);
@@ -389,6 +414,7 @@ export default function RecentOrdersTable({ maxRows = 50 }: RecentOrdersTablePro
               <SelectContent>
                 <SelectItem value="ALL">All Status</SelectItem>
                 <SelectItem value="FILLED">Filled</SelectItem>
+                <SelectItem value="REDUCE">Reduce</SelectItem>
                 <SelectItem value="NEW">Open</SelectItem>
                 <SelectItem value="PARTIALLY_FILLED">Partial</SelectItem>
                 <SelectItem value="CANCELED">Canceled</SelectItem>

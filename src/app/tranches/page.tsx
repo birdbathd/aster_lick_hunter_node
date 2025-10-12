@@ -145,7 +145,7 @@ export default function TranchesPage() {
             <h4 className="font-semibold">2. Isolation (Optional)</h4>
             <p className="text-muted-foreground">
               If a tranche goes &gt;5% underwater (configurable), it gets automatically isolated. This means new trades
-              won't add to this position - you can continue trading while waiting for recovery.
+              won&apos;t add to this position - you can continue trading while waiting for recovery.
             </p>
           </div>
 

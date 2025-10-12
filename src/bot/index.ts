@@ -394,7 +394,7 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
 
       if (trancheEnabledSymbols.length > 0) {
         try {
-          const { initializeTrancheManager, getTrancheManager } = await import('../lib/services/trancheManager');
+          const { initializeTrancheManager } = await import('../lib/services/trancheManager');
           const trancheManager = initializeTrancheManager(this.config);
           await trancheManager.initialize();
 

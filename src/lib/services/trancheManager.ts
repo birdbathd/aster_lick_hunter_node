@@ -1,18 +1,16 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { Config, Tranche, TrancheGroup, TrancheStrategy } from '../types';
+import { Config, Tranche, TrancheGroup } from '../types';
 import { getMarkPrice } from '../api/market';
 import { logWithTimestamp, logWarnWithTimestamp, logErrorWithTimestamp } from '../utils/timestamp';
 import {
   createTranche as dbCreateTranche,
   getTranche,
   getActiveTranches,
-  getIsolatedTranches,
   updateTranche,
   updateTrancheUnrealizedPnl,
   isolateTranche as dbIsolateTranche,
   closeTranche as dbCloseTranche,
-  liquidateTranche as dbLiquidateTranche,
   logTrancheEvent,
 } from '../db/trancheDb';
 

@@ -1248,7 +1248,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                       const value = parseInt(e.target.value);
                                       if (e.target.value === '' || isNaN(value)) {
                                         // Remove the field if empty - will use default from config.default.json
-                                        const { vwapLookback, ...rest } = config.symbols[selectedSymbol];
+                                        const { vwapLookback: _vwapLookback, ...rest } = config.symbols[selectedSymbol];
                                         setConfig({
                                           ...config,
                                           symbols: {
@@ -1318,7 +1318,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                           const seconds = parseFloat(e.target.value);
                                           if (e.target.value === '' || isNaN(seconds)) {
                                             // Remove the field if empty - will use default from config.default.json
-                                            const { thresholdTimeWindow, ...rest } = config.symbols[selectedSymbol];
+                                            const { thresholdTimeWindow: _thresholdTimeWindow, ...rest } = config.symbols[selectedSymbol];
                                             setConfig({
                                               ...config,
                                               symbols: {
@@ -1349,7 +1349,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                           const seconds = parseFloat(e.target.value);
                                           if (e.target.value === '' || isNaN(seconds)) {
                                             // Remove the field if empty - will use default from config.default.json
-                                            const { thresholdCooldown, ...rest } = config.symbols[selectedSymbol];
+                                            const { thresholdCooldown: _thresholdCooldown, ...rest } = config.symbols[selectedSymbol];
                                             setConfig({
                                               ...config,
                                               symbols: {

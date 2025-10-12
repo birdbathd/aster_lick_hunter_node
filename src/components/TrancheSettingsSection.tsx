@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -60,7 +59,7 @@ export function TrancheSettingsSection({ symbol, config, onChange }: TrancheSett
                     <TooltipContent>
                       <p className="max-w-xs">
                         Tranches with unrealized loss exceeding this percentage will be isolated.
-                        New trades won't add to isolated tranches.
+                        New trades won&apos;t add to isolated tranches.
                       </p>
                     </TooltipContent>
                   </Tooltip>

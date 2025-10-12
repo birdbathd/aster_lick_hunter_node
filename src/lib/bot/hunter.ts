@@ -1172,7 +1172,7 @@ logWarnWithTimestamp('Hunter: Cannot determine correct mode. Since we cannot ver
         if (symbolConfig.enableTrancheManagement) {
           try {
             const trancheManager = getTrancheManager();
-            const trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
+            const _trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
 
             const tranche = await trancheManager.createTranche({
               symbol,

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { TrendingUp, TrendingDown, AlertTriangle, Clock, DollarSign } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Clock, DollarSign } from 'lucide-react';
 import { Tranche } from '@/lib/types';
 
 interface TrancheBreakdownCardProps {
@@ -35,6 +35,7 @@ export function TrancheBreakdownCard({ symbol, side }: TrancheBreakdownCardProps
     // Refresh every 5 seconds
     const interval = setInterval(fetchTranches, 5000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, side]);
 
   const fetchTranches = async () => {

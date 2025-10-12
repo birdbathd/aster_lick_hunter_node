@@ -84,7 +84,7 @@ export function TrancheTimeline() {
 
   const getEventTitle = (event: TrancheEvent) => {
     const { type, data } = event;
-    const trancheId = data.trancheId?.substring(0, 8) || 'Unknown';
+    const _trancheId = data.trancheId?.substring(0, 8) || 'Unknown';
 
     switch (type) {
       case 'tranche_created':

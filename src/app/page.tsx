@@ -251,25 +251,23 @@ export default function DashboardPage() {
       <div className="flex h-full overflow-hidden">
         {/* Main Content */}
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-          {/* Account Summary - Minimal Design */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Account Summary - Single Row */}
+          <div className="flex items-center gap-x-3 overflow-x-auto pb-1">
             {/* Total Balance */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Wallet className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Balance</span>
-                <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Balance</span>
+                <div className="flex items-center gap-1">
                   {isLoading ? (
-                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-4 w-20" />
                   ) : (
                     <>
-                      <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalBalance)}</span>
+                      <span className="text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.totalBalance)}</span>
                       {balanceStatus.error ? (
-                        <Badge variant="destructive" className="h-4 text-[10px] px-1">ERROR</Badge>
+                        <Badge variant="destructive" className="h-3 text-[9px] px-0.5">!</Badge>
                       ) : balanceStatus.source === 'websocket' ? (
-                        <Badge variant="default" className="h-4 text-[10px] px-1 bg-green-600">LIVE</Badge>
-                      ) : balanceStatus.source === 'rest-account' || balanceStatus.source === 'rest-balance' ? (
-                        <Badge variant="secondary" className="h-4 text-[10px] px-1">REST</Badge>
+                        <Badge variant="default" className="h-3 text-[9px] px-0.5 bg-green-600">L</Badge>
                       ) : null}
                     </>
                   )}
@@ -277,59 +275,59 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
-            {/* Available Balance */}
-            <div className="flex items-center gap-2">
+            {/* Available */}
+            <div className="flex items-center gap-1.5 shrink-0">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Available</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Available</span>
                 {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-4 w-16" />
                 ) : (
-                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.availableBalance)}</span>
+                  <span className="text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.availableBalance)}</span>
                 )}
               </div>
             </div>
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
-            {/* Position Value */}
-            <div className="flex items-center gap-2">
+            {/* In Position */}
+            <div className="flex items-center gap-1.5 shrink-0">
               <Activity className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">In Position</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">In Position</span>
                 {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-4 w-16" />
                 ) : (
-                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
+                  <span className="text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
                 )}
               </div>
             </div>
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
             {/* Unrealized PnL */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               {liveAccountInfo.totalPnL >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-green-600" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-600" />
               )}
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Unrealized PnL</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Unrealized PnL</span>
                 {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-4 w-20" />
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-lg font-semibold ${
+                  <div className="flex items-center gap-1">
+                    <span className={`text-sm font-semibold whitespace-nowrap ${
                       liveAccountInfo.totalPnL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                       {formatCurrency(liveAccountInfo.totalPnL)}
                     </span>
                     <Badge
                       variant={liveAccountInfo.totalPnL >= 0 ? "outline" : "destructive"}
-                      className={`h-4 text-[10px] px-1 ${
+                      className={`h-3 text-[9px] px-0.5 ${
                         liveAccountInfo.totalPnL >= 0
                           ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
                           : ''
@@ -345,42 +343,30 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
-            {/* 24h Performance - Inline */}
+            {/* 24h Performance */}
             <PerformanceCardInline />
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
-            {/* Live Session Performance */}
+            {/* Session */}
             <SessionPerformanceCard />
 
-            <div className="w-px h-8 bg-border" />
+            <div className="w-px h-6 bg-border shrink-0" />
 
-            {/* Active Trading Symbols */}
-            <div className="flex items-center gap-2">
+            {/* Active Symbols */}
+            <div className="flex items-center gap-1.5 shrink-0">
               <Target className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Active Symbols</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Active Symbols</span>
                 <div className="flex items-center gap-1">
                   {config?.symbols && Object.keys(config.symbols).length > 0 ? (
                     <>
-                      <span className="text-lg font-semibold">{Object.keys(config.symbols).length}</span>
-                      <div className="flex gap-1 max-w-[200px] overflow-hidden">
-                        {Object.keys(config.symbols).slice(0, 3).map((symbol, _index) => (
-                          <Badge key={symbol} variant="outline" className="h-4 text-[10px] px-1">
-                            {symbol.replace('USDT', '')}
-                          </Badge>
-                        ))}
-                        {Object.keys(config.symbols).length > 3 && (
-                          <Badge variant="outline" className="h-4 text-[10px] px-1">
-                            +{Object.keys(config.symbols).length - 3}
-                          </Badge>
-                        )}
-                      </div>
+                      <span className="text-sm font-semibold">{Object.keys(config.symbols).length}</span>
                     </>
                   ) : (
-                    <span className="text-lg font-semibold text-muted-foreground">0</span>
+                    <span className="text-sm font-semibold text-muted-foreground">0</span>
                   )}
                 </div>
               </div>

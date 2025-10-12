@@ -43,7 +43,8 @@ export interface SymbolConfig {
   // Advanced tranche settings
   allowTrancheWhileIsolated?: boolean;         // Allow new tranches when some are isolated (default: true)
   isolatedTrancheMinMargin?: number;           // Min margin to keep in isolated tranches (USDT)
-  trancheAutoCloseIsolated?: boolean;          // Auto-close isolated tranches at breakeven (default: false)
+  trancheAutoCloseIsolated?: boolean;          // Auto-close isolated tranches when recovered (default: false)
+  trancheRecoveryThreshold?: number;           // % profit to auto-close isolated tranche (default: 0.5%)
 }
 
 export interface ApiCredentials {

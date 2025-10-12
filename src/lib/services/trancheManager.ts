@@ -255,6 +255,101 @@ export class TrancheManagerService extends EventEmitter {
     }
   }
 
+  // Check if an isolated tranche has recovered (P&L > recovery threshold)
+  public shouldRecoverTranche(tranche: Tranche, currentPrice: number): boolean {
+    if (!tranche.isolated || tranche.status !== 'active') {
+      return false;
+    }
+
+    const symbolConfig = this.config.symbols[tranche.symbol];
+    if (!symbolConfig || !symbolConfig.trancheAutoCloseIsolated) {
+      return false;
+    }
+
+    const recoveryThreshold = symbolConfig.trancheRecoveryThreshold ?? 0.5;
+
+    // Calculate unrealized P&L %
+    const pnlPercent = this.calculatePnlPercent(
+      tranche.entryPrice,
+      currentPrice,
+      tranche.side
+    );
+
+    // Recovered if P&L is positive and exceeds recovery threshold
+    return pnlPercent >= recoveryThreshold;
+  }
+
+  // Monitor all isolated tranches and auto-close if recovered
+  public async checkRecoveryConditions(): Promise<void> {
+    for (const [_key, group] of this.trancheGroups) {
+      if (group.isolatedTranches.length === 0) continue;
+
+      try {
+        const currentPrice = await this.getCurrentPrice(group.symbol);
+        const symbolConfig = this.config.symbols[group.symbol];
+
+        // Skip if auto-close is not enabled
+        if (!symbolConfig?.trancheAutoCloseIsolated) {
+          continue;
+        }
+
+        for (const tranche of group.isolatedTranches) {
+          if (this.shouldRecoverTranche(tranche, currentPrice)) {
+            await this.autoCloseRecoveredTranche(tranche.id, currentPrice);
+          }
+        }
+      } catch (error) {
+        logErrorWithTimestamp(`TrancheManager: Failed to check recovery for ${group.symbol}:`, error);
+      }
+    }
+  }
+
+  // Auto-close a recovered isolated tranche
+  private async autoCloseRecoveredTranche(trancheId: string, currentPrice: number): Promise<void> {
+    const tranche = await getTranche(trancheId);
+    if (!tranche || !tranche.isolated) return;
+
+    const pnlPercent = this.calculatePnlPercent(tranche.entryPrice, currentPrice, tranche.side);
+    const realizedPnl = this.calculateUnrealizedPnl(
+      tranche.entryPrice,
+      currentPrice,
+      tranche.quantity,
+      tranche.side
+    );
+
+    logWithTimestamp(
+      `TrancheManager: Auto-closing recovered isolated tranche ${trancheId.substring(0, 8)} for ${tranche.symbol} at ${currentPrice} (${pnlPercent.toFixed(2)}% P&L, +${realizedPnl.toFixed(2)} USDT)`
+    );
+
+    // Close the tranche
+    await this.closeTranche({
+      trancheId,
+      exitPrice: currentPrice,
+      realizedPnl,
+      orderId: `auto_recovery_${Date.now()}`,
+    });
+
+    // Log event
+    await logTrancheEvent(trancheId, 'closed', {
+      price: currentPrice,
+      quantity: tranche.quantity,
+      pnl: realizedPnl,
+      trigger: 'auto_close_recovery',
+    });
+
+    // Emit event
+    this.emit('trancheAutoClosedRecovery', {
+      tranche,
+      exitPrice: currentPrice,
+      pnlPercent,
+      realizedPnl,
+    });
+
+    logWithTimestamp(
+      `TrancheManager: Successfully auto-closed recovered tranche ${trancheId.substring(0, 8)} - freed ${tranche.marginUsed.toFixed(2)} USDT margin`
+    );
+  }
+
   // Select which tranche(s) to close based on LIFO strategy (newest first)
   public selectTranchesToClose(
     symbol: string,
@@ -558,8 +653,9 @@ export class TrancheManagerService extends EventEmitter {
       this.recalculateGroupMetrics(group);
     }
 
-    // Check isolation conditions after P&L update
+    // Check isolation and recovery conditions after P&L update
     await this.checkIsolationConditions();
+    await this.checkRecoveryConditions();
   }
 
   // Calculate unrealized P&L for a tranche
@@ -589,19 +685,20 @@ export class TrancheManagerService extends EventEmitter {
     }
   }
 
-  // Start isolation monitoring
+  // Start isolation and recovery monitoring
   public startIsolationMonitoring(intervalMs: number = 10000): void {
     this.stopIsolationMonitoring();
 
     this.isolationCheckInterval = setInterval(async () => {
       try {
         await this.checkIsolationConditions();
+        await this.checkRecoveryConditions();
       } catch (error) {
-        logErrorWithTimestamp('TrancheManager: Isolation check failed:', error);
+        logErrorWithTimestamp('TrancheManager: Isolation/Recovery check failed:', error);
       }
     }, intervalMs);
 
-    logWithTimestamp(`TrancheManager: Started isolation monitoring (every ${intervalMs / 1000}s)`);
+    logWithTimestamp(`TrancheManager: Started isolation and recovery monitoring (every ${intervalMs / 1000}s)`);
   }
 
   public stopIsolationMonitoring(): void {

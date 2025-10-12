@@ -197,7 +197,7 @@ export function TrancheSettingsSection({ symbol, config, onChange }: TrancheSett
                     Auto-Close Isolated Tranches
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Automatically close isolated tranches when they recover (experimental)
+                    Automatically close isolated tranches when they recover
                   </p>
                 </div>
                 <Switch
@@ -206,6 +206,42 @@ export function TrancheSettingsSection({ symbol, config, onChange }: TrancheSett
                   onCheckedChange={(checked) => onChange('trancheAutoCloseIsolated', checked)}
                 />
               </div>
+
+              {config.trancheAutoCloseIsolated && (
+                <div className="grid gap-2 ml-6 pl-4 border-l-2 border-muted">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`${symbol}-recovery-threshold`}>
+                      Recovery Threshold (%)
+                    </Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">
+                            Isolated tranches will auto-close when unrealized profit exceeds this percentage.
+                            Example: 0.5% means close at +0.5% profit (just above breakeven).
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input
+                    id={`${symbol}-recovery-threshold`}
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={config.trancheRecoveryThreshold ?? 0.5}
+                    onChange={(e) => onChange('trancheRecoveryThreshold', parseFloat(e.target.value) || 0.5)}
+                    placeholder="0.5"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Default: 0.5% profit. Typical range: 0-2%
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}

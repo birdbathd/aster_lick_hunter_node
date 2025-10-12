@@ -152,92 +152,21 @@ export function TrancheSettingsSection({ symbol, config, onChange }: TrancheSett
 
             <Separator />
 
-            {/* Closing Strategy */}
-            <div className="grid gap-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor={`${symbol}-closing-strategy`}>
-                  Closing Strategy
-                </Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="h-4 w-4 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Determines which tranches to close first when SL/TP is hit:
-                        <br />• FIFO: First in, first out
-                        <br />• LIFO: Last in, first out
-                        <br />• WORST_FIRST: Most negative P&L first
-                        <br />• BEST_FIRST: Most positive P&L first
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+            {/* Strategy Info */}
+            <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+              <h4 className="font-medium text-sm">Tranche Strategies (Auto-configured)</h4>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">Closing Strategy:</span> LIFO (Last In, First Out)
+                  <br />
+                  <span className="text-xs">→ Closes newest tranches first for quick profit-taking</span>
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">SL/TP Strategy:</span> Best Entry Price
+                  <br />
+                  <span className="text-xs">→ Protects your most favorable entry price</span>
+                </p>
               </div>
-              <Select
-                value={config.trancheStrategy?.closingStrategy ?? 'FIFO'}
-                onValueChange={(value) =>
-                  onChange('trancheStrategy', {
-                    ...(config.trancheStrategy || {}),
-                    closingStrategy: value,
-                  })
-                }
-              >
-                <SelectTrigger id={`${symbol}-closing-strategy`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FIFO">FIFO (First In, First Out)</SelectItem>
-                  <SelectItem value="LIFO">LIFO (Last In, First Out)</SelectItem>
-                  <SelectItem value="WORST_FIRST">Worst First (Most Negative P&L)</SelectItem>
-                  <SelectItem value="BEST_FIRST">Best First (Most Positive P&L)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* SL/TP Strategy */}
-            <div className="grid gap-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor={`${symbol}-sltp-strategy`}>
-                  SL/TP Price Strategy
-                </Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="h-4 w-4 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Determines which tranche's TP/SL prices to use for exchange orders:
-                        <br />• NEWEST: Use newest tranche's prices
-                        <br />• OLDEST: Use oldest tranche's prices
-                        <br />• BEST_ENTRY: Use best entry price
-                        <br />• AVERAGE: Use weighted average
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <Select
-                value={config.trancheStrategy?.slTpStrategy ?? 'NEWEST'}
-                onValueChange={(value) =>
-                  onChange('trancheStrategy', {
-                    ...(config.trancheStrategy || {}),
-                    slTpStrategy: value,
-                  })
-                }
-              >
-                <SelectTrigger id={`${symbol}-sltp-strategy`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NEWEST">Newest Tranche</SelectItem>
-                  <SelectItem value="OLDEST">Oldest Tranche</SelectItem>
-                  <SelectItem value="BEST_ENTRY">Best Entry Price</SelectItem>
-                  <SelectItem value="AVERAGE">Weighted Average</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <Separator />

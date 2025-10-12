@@ -185,15 +185,16 @@ Result: +5.1% total profit vs -5% loss without tranches
 
 ### Strategy Settings
 
-#### 1. Closing Strategy
-Determines which tranches to close first when a position is exited.
+The tranche system uses optimized strategies that are hardcoded for best performance:
 
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| **FIFO** | First In, First Out (close oldest) | Trending markets, hold & recover |
-| **LIFO** | Last In, First Out (close newest) | Scalping, quick trades |
-| **WORST_FIRST** | Close most negative P&L first | Cutting losses quickly |
-| **BEST_FIRST** | Close most positive P&L first | Locking in profits fast |
+#### 1. Closing Strategy: LIFO (Last In, First Out)
+**Automatically configured** - closes newest tranches first.
+
+**Why LIFO?**
+- Perfect for liquidation hunting strategies
+- Quick profit-taking on recent entries
+- Keeps older positions for potential recovery
+- Minimizes complexity
 
 **Example:**
 ```
@@ -202,23 +203,15 @@ Tranches:
 #2: LONG @ $48,000 → +2% (middle, profitable)
 #3: LONG @ $49,000 → +1% (newest, profitable)
 
-FIFO → Close #1 first (-5%)
-LIFO → Close #3 first (+1%)
-WORST_FIRST → Close #1 first (-5%)
-BEST_FIRST → Close #2 first (+2%)
+SL/TP triggers → LIFO closes #3 first, then #2, then #1
 ```
 
-#### 2. SL/TP Strategy
-Determines which tranche's stop-loss and take-profit targets to use for exchange orders.
+#### 2. Best Entry Tracking
+The bot tracks which tranche has the most favorable entry price:
+- **For LONG positions:** Lowest entry price
+- **For SHORT positions:** Highest entry price
 
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| **NEWEST** | Use newest tranche's SL/TP | Prioritize recent entries |
-| **OLDEST** | Use oldest tranche's SL/TP | Protect original position |
-| **BEST_ENTRY** | Use best entry price's SL/TP | Protect most favorable entry |
-| **AVERAGE** | Calculate weighted average SL/TP | Balanced approach |
-
-**Note:** Exchange only allows one SL and one TP order per position, so the bot must choose which tranche's targets to use.
+This is used for display purposes and P&L tracking to help you understand your best positions.
 
 #### 3. Isolation Action
 Determines what happens when a tranche is isolated.
@@ -300,7 +293,9 @@ Events appear in real-time and show:
 
 ## Trading Strategies
 
-### Strategy 1: Scalping with Quick Recovery
+The tranche system automatically uses **LIFO closing** for all strategies. Configure these parameters to match your trading style:
+
+### Strategy 1: Aggressive Scalping
 
 **Goal:** Fast in-and-out trades with minimal isolation time
 
@@ -310,19 +305,14 @@ Events appear in real-time and show:
   "trancheIsolationThreshold": 3,
   "maxTranches": 5,
   "maxIsolatedTranches": 2,
-  "allowTrancheWhileIsolated": true,
-  "trancheStrategy": {
-    "closingStrategy": "LIFO",
-    "slTpStrategy": "NEWEST",
-    "isolationAction": "HOLD"
-  }
+  "allowTrancheWhileIsolated": true
 }
 ```
 
 **Characteristics:**
 - Low 3% isolation threshold → quick isolation
 - High max tranches (5) → more opportunities
-- LIFO closing → exit newest (fastest profit)
+- LIFO automatically takes profits on newest entries
 - Good for high-volatility, liquid pairs
 
 **Pros:** Maximum trading frequency, quick profit generation
@@ -340,19 +330,14 @@ Events appear in real-time and show:
   "trancheIsolationThreshold": 10,
   "maxTranches": 3,
   "maxIsolatedTranches": 2,
-  "allowTrancheWhileIsolated": true,
-  "trancheStrategy": {
-    "closingStrategy": "FIFO",
-    "slTpStrategy": "OLDEST",
-    "isolationAction": "HOLD"
-  }
+  "allowTrancheWhileIsolated": true
 }
 ```
 
 **Characteristics:**
 - High 10% isolation threshold → rare isolation
 - Moderate max tranches (3) → balanced
-- FIFO closing → close oldest positions first
+- LIFO lets profitable new entries close first
 - Good for trending, less volatile pairs
 
 **Pros:** Fewer isolations, simpler management
@@ -360,9 +345,9 @@ Events appear in real-time and show:
 
 ---
 
-### Strategy 3: Maximize Realized Gains
+### Strategy 3: Balanced Approach
 
-**Goal:** Lock in profits fast, hold losers for recovery
+**Goal:** Balance between quick profits and position recovery
 
 **Configuration:**
 ```json
@@ -370,23 +355,18 @@ Events appear in real-time and show:
   "trancheIsolationThreshold": 5,
   "maxTranches": 4,
   "maxIsolatedTranches": 2,
-  "allowTrancheWhileIsolated": true,
-  "trancheStrategy": {
-    "closingStrategy": "BEST_FIRST",
-    "slTpStrategy": "BEST_ENTRY",
-    "isolationAction": "HOLD"
-  }
+  "allowTrancheWhileIsolated": true
 }
 ```
 
 **Characteristics:**
 - Balanced 5% isolation threshold
-- BEST_FIRST closing → exit winners first
-- BEST_ENTRY SL/TP → protect best price
+- Moderate max tranches (4)
+- LIFO closes newest (often most profitable)
 - Good for mixed market conditions
 
-**Pros:** Maximize realized P&L quickly
-**Cons:** May hold losers longer
+**Pros:** Good balance of profit-taking and recovery
+**Cons:** Middle-ground complexity
 
 ---
 
@@ -400,12 +380,7 @@ Events appear in real-time and show:
   "trancheIsolationThreshold": 7,
   "maxTranches": 2,
   "maxIsolatedTranches": 1,
-  "allowTrancheWhileIsolated": false,
-  "trancheStrategy": {
-    "closingStrategy": "WORST_FIRST",
-    "slTpStrategy": "AVERAGE",
-    "isolationAction": "HOLD"
-  }
+  "allowTrancheWhileIsolated": false
 }
 ```
 
@@ -413,7 +388,7 @@ Events appear in real-time and show:
 - Moderate 7% isolation threshold
 - Low max tranches (2) → simple tracking
 - Block new trades when isolated → no compounding losses
-- WORST_FIRST → cut losses quickly
+- LIFO minimizes exposure time
 
 **Pros:** Simple, controlled risk
 **Cons:** Fewer trading opportunities
@@ -547,13 +522,10 @@ SELECT * FROM tranche_events ORDER BY event_time DESC LIMIT 20;
   "trancheIsolationThreshold": 5,    // Balanced threshold
   "maxTranches": 3,                  // Moderate complexity
   "maxIsolatedTranches": 2,          // Safety buffer
-  "trancheStrategy": {
-    "closingStrategy": "FIFO",       // Simple, predictable
-    "slTpStrategy": "NEWEST",        // Favor recent entries
-    "isolationAction": "HOLD"        // Wait for recovery
-  }
+  "allowTrancheWhileIsolated": true  // Continue trading
 }
 ```
+Note: LIFO closing and best entry tracking are automatically configured.
 
 ### 3. Monitor Regularly
 - Check `/tranches` dashboard daily
@@ -653,12 +625,8 @@ A: Recommended: 3-5 for most strategies. More tranches = more complexity and mon
 **Q: Should I allow tranches while isolated?**
 A: Generally YES. This lets you keep trading while bad positions recover. Set to NO if you want stricter risk control.
 
-**Q: Which closing strategy is best?**
-A: Depends on your goal:
-- **FIFO**: Best for trending markets
-- **LIFO**: Best for scalping/choppy markets
-- **BEST_FIRST**: Maximize realized gains
-- **WORST_FIRST**: Cut losses quickly
+**Q: Can I change the closing strategy?**
+A: The closing strategy is automatically set to LIFO (Last In, First Out), which is optimal for liquidation hunting. LIFO closes newest tranches first, allowing quick profit-taking while letting older positions recover. This is hardcoded for simplicity and best performance.
 
 ---
 

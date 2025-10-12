@@ -148,13 +148,13 @@ export interface MarkPrice {
 // Tranche Management Types
 
 export interface TrancheStrategy {
-  // Closing priority when SL/TP hits
-  closingStrategy: 'FIFO' | 'LIFO' | 'WORST_FIRST' | 'BEST_FIRST';
+  // Note: Closing strategy is hardcoded to LIFO (Last In, First Out)
+  // This closes newest tranches first for quick profit-taking
 
-  // SL/TP calculation method
-  slTpStrategy: 'NEWEST' | 'OLDEST' | 'BEST_ENTRY' | 'AVERAGE';
+  // Note: SL/TP strategy is hardcoded to BEST_ENTRY
+  // This protects the most favorable entry price
 
-  // Isolation behavior
+  // Isolation behavior (future feature - currently only HOLD is implemented)
   isolationAction: 'HOLD' | 'REDUCE_LEVERAGE' | 'PARTIAL_CLOSE';
 }
 

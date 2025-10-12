@@ -255,7 +255,7 @@ export class TrancheManagerService extends EventEmitter {
     }
   }
 
-  // Select which tranche(s) to close based on strategy
+  // Select which tranche(s) to close based on LIFO strategy (newest first)
   public selectTranchesToClose(
     symbol: string,
     side: 'LONG' | 'SHORT',
@@ -265,28 +265,11 @@ export class TrancheManagerService extends EventEmitter {
     const group = this.trancheGroups.get(groupKey);
     if (!group) return [];
 
-    const symbolConfig = this.config.symbols[symbol];
-    const strategy = symbolConfig?.trancheStrategy?.closingStrategy || 'FIFO';
-
     const tranchesToClose: Tranche[] = [];
     let remainingQty = quantityToClose;
 
-    // Sort tranches based on strategy
-    let sortedTranches = [...group.activeTranches];
-    switch (strategy) {
-      case 'FIFO':
-        sortedTranches.sort((a, b) => a.entryTime - b.entryTime); // Oldest first
-        break;
-      case 'LIFO':
-        sortedTranches.sort((a, b) => b.entryTime - a.entryTime); // Newest first
-        break;
-      case 'WORST_FIRST':
-        sortedTranches.sort((a, b) => a.unrealizedPnl - b.unrealizedPnl); // Most negative first
-        break;
-      case 'BEST_FIRST':
-        sortedTranches.sort((a, b) => b.unrealizedPnl - a.unrealizedPnl); // Most positive first
-        break;
-    }
+    // LIFO: Sort tranches by entry time (newest first)
+    const sortedTranches = [...group.activeTranches].sort((a, b) => b.entryTime - a.entryTime);
 
     // Select tranches until we have enough quantity
     for (const tranche of sortedTranches) {
@@ -718,6 +701,35 @@ export class TrancheManagerService extends EventEmitter {
 
   public getAllTrancheGroups(): TrancheGroup[] {
     return Array.from(this.trancheGroups.values());
+  }
+
+  // Get the tranche with the best entry price (BEST_ENTRY strategy)
+  // For LONG: lowest entry price, For SHORT: highest entry price
+  public getBestEntryTranche(symbol: string, side: 'LONG' | 'SHORT'): Tranche | null {
+    const groupKey = this.getGroupKey(symbol, side);
+    const group = this.trancheGroups.get(groupKey);
+
+    if (!group || group.activeTranches.length === 0) {
+      return null;
+    }
+
+    // Find tranche with best entry
+    let bestTranche = group.activeTranches[0];
+    for (const tranche of group.activeTranches) {
+      if (side === 'LONG') {
+        // For LONG: lower entry price is better
+        if (tranche.entryPrice < bestTranche.entryPrice) {
+          bestTranche = tranche;
+        }
+      } else {
+        // For SHORT: higher entry price is better
+        if (tranche.entryPrice > bestTranche.entryPrice) {
+          bestTranche = tranche;
+        }
+      }
+    }
+
+    return bestTranche;
   }
 }
 

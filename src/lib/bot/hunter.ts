@@ -10,7 +10,6 @@ import { liquidationStorage } from '../services/liquidationStorage';
 import { vwapService } from '../services/vwapService';
 import { vwapStreamer } from '../services/vwapStreamer';
 import { thresholdMonitor } from '../services/thresholdMonitor';
-import { getTrancheManager } from '../services/trancheManager';
 import { symbolPrecision } from '../utils/symbolPrecision';
 import {
   parseExchangeError,
@@ -29,7 +28,6 @@ export class Hunter extends EventEmitter {
   private ws: WebSocket | null = null;
   private config: Config;
   private isRunning = false;
-  private isPaused = false;
   private statusBroadcaster: any; // Will be injected
   private isHedgeMode: boolean;
   private positionTracker: PositionTracker | null = null;
@@ -308,9 +306,9 @@ logErrorWithTimestamp('Hunter: Failed to initialize symbol precision manager:', 
       // Continue anyway, will use default precision values
     }
 
-    // In paper mode, simulate liquidation events (regardless of API keys)
-    if (this.config.global.paperMode) {
-logWithTimestamp('Hunter: Running in PAPER MODE - simulating liquidations with real market prices');
+    // In paper mode with no API keys, simulate liquidation events
+    if (this.config.global.paperMode && (!this.config.api.apiKey || !this.config.api.secretKey)) {
+logWithTimestamp('Hunter: Running in paper mode without API keys - simulating liquidations');
       this.simulateLiquidations();
     } else {
       this.connectWebSocket();
@@ -319,7 +317,6 @@ logWithTimestamp('Hunter: Running in PAPER MODE - simulating liquidations with r
 
   stop(): void {
     this.isRunning = false;
-    this.isPaused = false;
 
     // Stop periodic cleanup
     this.stopPeriodicCleanup();
@@ -335,24 +332,6 @@ logWithTimestamp('Hunter: Stopped periodic position mode sync');
       this.ws.close();
       this.ws = null;
     }
-  }
-
-  pause(): void {
-    if (!this.isRunning || this.isPaused) {
-logWithTimestamp('Hunter: Cannot pause - not running or already paused');
-      return;
-    }
-    this.isPaused = true;
-logWithTimestamp('Hunter: Paused - no new trades will be placed');
-  }
-
-  resume(): void {
-    if (!this.isRunning || !this.isPaused) {
-logWithTimestamp('Hunter: Cannot resume - not running or not paused');
-      return;
-    }
-    this.isPaused = false;
-logWithTimestamp('Hunter: Resumed - trading active');
   }
 
   private connectWebSocket(): void {
@@ -592,12 +571,6 @@ logWithTimestamp(`Hunter: ✓ Cooldown passed - Triggering ${tradeSide} trade fo
   }
 
   private async analyzeAndTrade(liquidation: LiquidationEvent, symbolConfig: SymbolConfig, _forcedSide?: 'BUY' | 'SELL'): Promise<void> {
-    // Check if bot is paused
-    if (this.isPaused) {
-logWithTimestamp(`Hunter: Skipping trade - bot is paused (${liquidation.symbol} ${liquidation.side})`);
-      return;
-    }
-
     try {
       // Get mark price and recent 1m kline
       const [markPriceData] = Array.isArray(await getMarkPrice(liquidation.symbol)) ?
@@ -755,46 +728,6 @@ logErrorWithTimestamp('Hunter: Analysis error:', error);
     let order: any; // Declare order variable for error handling
 
     try {
-      // Check tranche management limits (if enabled)
-      if (symbolConfig.enableTrancheManagement) {
-        try {
-          const trancheManager = getTrancheManager();
-          const trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
-
-          // Update P&L and check isolation conditions
-          const markPriceData = await getMarkPrice(symbol);
-          const price = parseFloat(Array.isArray(markPriceData) ? markPriceData[0].markPrice : markPriceData.markPrice);
-          await trancheManager.updateUnrealizedPnl(symbol, price);
-
-          // Check if we can open a new tranche
-          const canOpen = trancheManager.canOpenNewTranche(symbol, trancheSide);
-          if (!canOpen.allowed) {
-            logWithTimestamp(`Hunter: ${canOpen.reason}`);
-
-            // Broadcast to UI
-            if (this.statusBroadcaster) {
-              this.statusBroadcaster.broadcastTradingError(
-                `Tranche Limit Reached - ${symbol}`,
-                canOpen.reason || 'Cannot open new tranche',
-                {
-                  component: 'Hunter',
-                  symbol,
-                  details: {
-                    activeTranches: trancheManager.getTranches(symbol, trancheSide).length,
-                    maxTranches: symbolConfig.maxTranches || 3,
-                  }
-                }
-              );
-            }
-
-            return; // Block the trade
-          }
-        } catch (trancheError) {
-          // If TrancheManager is not initialized, log warning but continue
-          logWarnWithTimestamp('Hunter: TrancheManager check failed (not initialized?), continuing with trade:', trancheError);
-        }
-      }
-
       // Check position limits before placing trade
       if (this.positionTracker && !this.config.global.paperMode) {
         // Check if we already have a pending order for this symbol
@@ -1168,30 +1101,6 @@ logWarnWithTimestamp('Hunter: Cannot determine correct mode. Since we cannot ver
 
       // Only broadcast and emit if order was successfully placed
       if (order && order.orderId) {
-        // Create tranche if tranche management is enabled
-        if (symbolConfig.enableTrancheManagement) {
-          try {
-            const trancheManager = getTrancheManager();
-            const trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
-
-            const tranche = await trancheManager.createTranche({
-              symbol,
-              side,
-              positionSide: getPositionSide(this.isHedgeMode, side) as any,
-              entryPrice: orderType === 'LIMIT' ? orderPrice : entryPrice,
-              quantity: quantity!,
-              marginUsed: tradeSizeUSDT,
-              leverage: symbolConfig.leverage,
-              orderId: order.orderId.toString(),
-            });
-
-            logWithTimestamp(`Hunter: Created tranche ${tranche.id.substring(0, 8)} for ${symbol} ${side}`);
-          } catch (trancheError) {
-            logErrorWithTimestamp('Hunter: Failed to create tranche:', trancheError);
-            // Don't fail the trade, just log the error
-          }
-        }
-
         // Broadcast order placed event
         if (this.statusBroadcaster) {
           this.statusBroadcaster.broadcastOrderPlaced({
@@ -1630,73 +1539,34 @@ logWithTimestamp('Hunter: No symbols configured for simulation');
       return;
     }
 
-    // Generate realistic liquidation events using actual market prices
-    const generateEvent = async () => {
+    // Generate random liquidation events every 5-10 seconds
+    const generateEvent = () => {
       if (!this.isRunning) return;
 
-      try {
-        // Pick a random symbol from config
-        const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-        const symbolConfig = this.config.symbols[symbol];
+      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+      const side = Math.random() > 0.5 ? 'SELL' : 'BUY';
+      const price = symbol === 'BTCUSDT' ? 40000 + Math.random() * 5000 : 2000 + Math.random() * 500;
+      const qty = Math.random() * 10;
 
-        // Fetch real market price
-        const markPriceData = await getMarkPrice(symbol);
-        const currentPrice = parseFloat(
-          Array.isArray(markPriceData) ? markPriceData[0].markPrice : markPriceData.markPrice
-        );
+      const mockEvent = {
+        o: {
+          s: symbol,
+          S: side,
+          p: price.toString(),
+          q: qty.toString(),
+          T: Date.now()
+        }
+      };
 
-        // Random side with slight bias
-        const side = Math.random() > 0.5 ? 'SELL' : 'BUY';
+logWithTimestamp(`Hunter: Simulated liquidation - ${symbol} ${side} ${qty.toFixed(4)} @ $${price.toFixed(2)}`);
+      this.handleLiquidationEvent(mockEvent);
 
-        // Simulate price with small variance (±0.5%)
-        const priceVariance = 0.005;
-        const simulatedPrice = currentPrice * (1 + (Math.random() - 0.5) * priceVariance);
-
-        // Calculate realistic quantity based on configured thresholds
-        const thresholdUSDT = side === 'SELL'
-          ? (symbolConfig.longVolumeThresholdUSDT || 1000)
-          : (symbolConfig.shortVolumeThresholdUSDT || 1000);
-
-        // Generate quantity that's 1-3x the threshold
-        const volumeMultiplier = 1 + Math.random() * 2;
-        const volumeUSDT = thresholdUSDT * volumeMultiplier;
-        const qty = volumeUSDT / simulatedPrice;
-
-        const mockEvent = {
-          e: 'forceOrder',
-          o: {
-            s: symbol,
-            S: side,
-            o: 'LIMIT',
-            p: simulatedPrice.toString(),
-            q: qty.toString(),
-            ap: simulatedPrice.toString(),
-            X: 'FILLED',
-            l: qty.toString(),
-            z: qty.toString(),
-            T: Date.now()
-          },
-          E: Date.now()
-        };
-
-logWithTimestamp(
-          `Hunter: [PAPER MODE] Simulated liquidation - ${symbol} ${side} ` +
-          `${volumeUSDT.toFixed(0)} USDT @ $${simulatedPrice.toFixed(4)}`
-        );
-
-        // Handle the simulated liquidation event
-        await this.handleLiquidationEvent(mockEvent);
-      } catch (error) {
-logErrorWithTimestamp('Hunter: Error generating simulated liquidation:', error);
-      }
-
-      // Schedule next event (random interval 10-30 seconds for more realistic behavior)
-      const delay = 10000 + Math.random() * 20000;
+      // Schedule next event
+      const delay = 5000 + Math.random() * 5000; // 5-10 seconds
       setTimeout(generateEvent, delay);
     };
 
-    // Start generating events after 3 seconds
-    setTimeout(generateEvent, 3000);
-logWithTimestamp('Hunter: Simulation started - will generate liquidations every 10-30 seconds using real market prices');
+    // Start generating events after 2 seconds
+    setTimeout(generateEvent, 2000);
   }
 }

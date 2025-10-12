@@ -378,28 +378,28 @@ export default function PositionTable({
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
-          <CardTitle className="text-sm md:text-base font-medium">Positions</CardTitle>
-          <Badge variant="secondary" className="h-4 md:h-5 text-[10px] md:text-xs px-1 md:px-1.5">
+          <CardTitle className="text-base font-medium">Positions</CardTitle>
+          <Badge variant="secondary" className="h-5 text-xs px-1.5">
             {displayPositions.length}
           </Badge>
-          <ChevronDown className={`h-3 w-3 md:h-3.5 md:w-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
         </button>
       </CardHeader>
 
       {!isCollapsed && (
-        <CardContent className="pt-0 px-2 md:px-6">
-          <div className="rounded-md border overflow-x-auto">
+        <CardContent className="pt-0">
+          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow className="h-8">
-                  <TableHead className="text-[10px] md:text-xs whitespace-nowrap">Symbol</TableHead>
-                  <TableHead className="text-[10px] md:text-xs whitespace-nowrap">Side</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-right whitespace-nowrap">Size</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-right whitespace-nowrap">Entry/Mark</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-right whitespace-nowrap hidden sm:table-cell">Liq. Price</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-right whitespace-nowrap">PnL</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-center whitespace-nowrap hidden md:table-cell">Protection</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-center whitespace-nowrap">Actions</TableHead>
+                  <TableHead className="text-xs">Symbol</TableHead>
+                  <TableHead className="text-xs">Side</TableHead>
+                  <TableHead className="text-xs text-right">Size</TableHead>
+                  <TableHead className="text-xs text-right">Entry/Mark</TableHead>
+                  <TableHead className="text-xs text-right">Liq. Price</TableHead>
+                  <TableHead className="text-xs text-right">PnL</TableHead>
+                  <TableHead className="text-xs text-center">Protection</TableHead>
+                  <TableHead className="text-xs text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -424,52 +424,52 @@ export default function PositionTable({
 
               return (
                 <TableRow key={key} className="h-12">
-                  <TableCell className="py-1.5 md:py-2">
-                    <div className="flex items-center gap-1 md:gap-1.5">
-                      <a
-                        href={`https://www.asterdex.com/en/futures/v1/${position.symbol}`}
-                        target="_blank"
+                  <TableCell className="py-2">
+                    <div className="flex items-center gap-1.5">
+                      <a 
+                        href={`https://www.asterdex.com/en/futures/v1/${position.symbol}`} 
+                        target="_blank" 
                         rel="noopener noreferrer"
-                        className="font-medium text-xs md:text-sm hover:underline hover:text-primary transition-colors whitespace-nowrap"
+                        className="font-medium text-sm hover:underline hover:text-primary transition-colors"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {position.symbol}
                       </a>
-                      <Badge variant="secondary" className="h-3.5 md:h-4 text-[9px] md:text-[10px] px-0.5 md:px-1">
+                      <Badge variant="secondary" className="h-4 text-[10px] px-1">
                         {position.leverage}x
                       </Badge>
                     </div>
                   </TableCell>
-                  <TableCell className="py-1.5 md:py-2">
+                  <TableCell className="py-2">
                     <Badge
                       variant={position.side === 'LONG' ? 'outline' : 'destructive'}
-                      className={`h-4 md:h-5 text-[10px] md:text-xs px-1 md:px-1.5 ${position.side === 'LONG' ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400' : ''}`}
+                      className={`h-5 text-xs px-1.5 ${position.side === 'LONG' ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400' : ''}`}
                     >
                       {position.side === 'LONG' ? (
-                        <TrendingUp className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5" />
+                        <TrendingUp className="h-3 w-3 mr-0.5" />
                       ) : (
-                        <TrendingDown className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5" />
+                        <TrendingDown className="h-3 w-3 mr-0.5" />
                       )}
                       {position.side[0]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right py-1.5 md:py-2">
-                    <div className="text-[11px] md:text-sm font-mono">
+                  <TableCell className="text-right py-2">
+                    <div className="text-sm font-mono">
                       {formatQuantity(position.symbol, position.quantity)}
                     </div>
-                    <div className="text-[9px] md:text-[10px] text-muted-foreground">
+                    <div className="text-[10px] text-muted-foreground">
                       ${position.margin.toFixed(2)}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right py-1.5 md:py-2">
-                    <div className="text-[11px] md:text-sm font-mono">
+                  <TableCell className="text-right py-2">
+                    <div className="text-sm font-mono">
                       ${formatPriceWithCommas(position.symbol, position.entryPrice)}
                     </div>
-                    <div className="text-[9px] md:text-[10px] text-muted-foreground">
+                    <div className="text-[10px] text-muted-foreground">
                       ${formatPriceWithCommas(position.symbol, position.markPrice)}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right py-1.5 md:py-2 hidden sm:table-cell">
+                  <TableCell className="text-right py-2">
                     {position.liquidationPrice && position.liquidationPrice > 0 ? (
                       <TooltipProvider>
                         <Tooltip>
@@ -486,16 +486,16 @@ export default function PositionTable({
                                   return (
                                     <>
                                       {(isNearLiquidation || isCritical) && (
-                                        <AlertTriangle className={`h-2.5 w-2.5 md:h-3 md:w-3 ${isCritical ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`} />
+                                        <AlertTriangle className={`h-3 w-3 ${isCritical ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`} />
                                       )}
-                                      <span className={`text-[11px] md:text-sm font-mono ${isCritical ? 'text-red-600 dark:text-red-400' : isNearLiquidation ? 'text-orange-600 dark:text-orange-400' : ''}`}>
+                                      <span className={`text-sm font-mono ${isCritical ? 'text-red-600 dark:text-red-400' : isNearLiquidation ? 'text-orange-600 dark:text-orange-400' : ''}`}>
                                         ${formatPriceWithCommas(position.symbol, position.liquidationPrice)}
                                       </span>
                                     </>
                                   );
                                 })()}
                               </div>
-                              <div className="text-[9px] md:text-[10px] text-muted-foreground">
+                              <div className="text-[10px] text-muted-foreground">
                                 {(() => {
                                   const distancePercent = position.side === 'LONG'
                                     ? ((position.markPrice - position.liquidationPrice) / position.markPrice) * 100
@@ -521,20 +521,20 @@ export default function PositionTable({
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right py-1.5 md:py-2">
+                  <TableCell className="text-right py-2">
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className={`text-[11px] md:text-sm font-semibold ${position.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <span className={`text-sm font-semibold ${position.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {position.pnl >= 0 ? '+' : ''}${Math.abs(position.pnl).toFixed(2)}
                       </span>
                       <Badge
                         variant={position.pnl >= 0 ? "outline" : "destructive"}
-                        className={`h-3 md:h-3.5 text-[8px] md:text-[9px] px-0.5 md:px-1 ${position.pnl >= 0 ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400' : ''}`}
+                        className={`h-3.5 text-[9px] px-1 ${position.pnl >= 0 ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400' : ''}`}
                       >
                         {position.pnlPercent >= 0 ? '+' : ''}{position.pnlPercent.toFixed(1)}%
                       </Badge>
                     </div>
                   </TableCell>
-                  <TableCell className="text-center py-1.5 md:py-2 hidden md:table-cell">
+                  <TableCell className="text-center py-2">
                     <div className="flex flex-col items-center gap-0.5">
                       <div className="flex items-center gap-0.5">
                         <TooltipProvider>
@@ -612,7 +612,7 @@ export default function PositionTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-center py-1.5 md:py-2">
+                  <TableCell className="text-center py-2">
                     <Button
                       variant="destructive"
                       size="sm"
@@ -620,11 +620,10 @@ export default function PositionTable({
                         e.stopPropagation();
                         handleClosePosition(position);
                       }}
-                      className="h-6 md:h-7 px-1.5 md:px-2 text-[10px] md:text-xs"
+                      className="h-7 px-2 text-xs"
                     >
-                      <X className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5 md:mr-1" />
-                      <span className="hidden sm:inline">Close</span>
-                      <span className="sm:hidden">X</span>
+                      <X className="h-3 w-3 mr-1" />
+                      Close
                     </Button>
                   </TableCell>
                 </TableRow>

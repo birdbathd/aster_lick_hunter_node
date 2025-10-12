@@ -250,24 +250,26 @@ export default function DashboardPage() {
 
       <div className="flex h-full overflow-hidden">
         {/* Main Content */}
-        <div className="flex-1 p-3 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
-          {/* Account Summary - Single Row */}
-          <div className="flex items-center gap-x-2 md:gap-x-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+        <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+          {/* Account Summary - Minimal Design */}
+          <div className="flex flex-wrap items-center gap-3">
             {/* Total Balance */}
-            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-              <Wallet className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">Balance</span>
-                <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">Balance</span>
+                <div className="flex items-center gap-2">
                   {isLoading ? (
-                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-5 w-20" />
                   ) : (
                     <>
-                      <span className="text-xs md:text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.totalBalance)}</span>
+                      <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalBalance)}</span>
                       {balanceStatus.error ? (
-                        <Badge variant="destructive" className="h-3 text-[9px] px-0.5">!</Badge>
+                        <Badge variant="destructive" className="h-4 text-[10px] px-1">ERROR</Badge>
                       ) : balanceStatus.source === 'websocket' ? (
-                        <Badge variant="default" className="h-3 text-[9px] px-0.5 bg-green-600">L</Badge>
+                        <Badge variant="default" className="h-4 text-[10px] px-1 bg-green-600">LIVE</Badge>
+                      ) : balanceStatus.source === 'rest-account' || balanceStatus.source === 'rest-balance' ? (
+                        <Badge variant="secondary" className="h-4 text-[10px] px-1">REST</Badge>
                       ) : null}
                     </>
                   )}
@@ -275,59 +277,59 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
-            {/* Available */}
-            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-              <DollarSign className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            {/* Available Balance */}
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">Available</span>
+                <span className="text-xs text-muted-foreground">Available</span>
                 {isLoading ? (
-                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-5 w-20" />
                 ) : (
-                  <span className="text-xs md:text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.availableBalance)}</span>
+                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.availableBalance)}</span>
                 )}
               </div>
             </div>
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
-            {/* In Position */}
-            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-              <Activity className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            {/* Position Value */}
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">In Position</span>
+                <span className="text-xs text-muted-foreground">In Position</span>
                 {isLoading ? (
-                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-5 w-20" />
                 ) : (
-                  <span className="text-xs md:text-sm font-semibold whitespace-nowrap">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
+                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
                 )}
               </div>
             </div>
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
             {/* Unrealized PnL */}
-            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+            <div className="flex items-center gap-2">
               {liveAccountInfo.totalPnL >= 0 ? (
-                <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
+                <TrendingUp className="h-4 w-4 text-green-600" />
               ) : (
-                <TrendingDown className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-600" />
+                <TrendingDown className="h-4 w-4 text-red-600" />
               )}
               <div className="flex flex-col">
-                <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">PnL</span>
+                <span className="text-xs text-muted-foreground">Unrealized PnL</span>
                 {isLoading ? (
-                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-20" />
                 ) : (
-                  <div className="flex items-center gap-1">
-                    <span className={`text-xs md:text-sm font-semibold whitespace-nowrap ${
+                  <div className="flex items-center gap-2">
+                    <span className={`text-lg font-semibold ${
                       liveAccountInfo.totalPnL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                       {formatCurrency(liveAccountInfo.totalPnL)}
                     </span>
                     <Badge
                       variant={liveAccountInfo.totalPnL >= 0 ? "outline" : "destructive"}
-                      className={`h-3 text-[9px] px-0.5 ${
+                      className={`h-4 text-[10px] px-1 ${
                         liveAccountInfo.totalPnL >= 0
                           ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
                           : ''
@@ -343,30 +345,42 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
-            {/* 24h Performance */}
+            {/* 24h Performance - Inline */}
             <PerformanceCardInline />
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
-            {/* Session */}
+            {/* Live Session Performance */}
             <SessionPerformanceCard />
 
-            <div className="w-px h-5 md:h-6 bg-border shrink-0" />
+            <div className="w-px h-8 bg-border" />
 
-            {/* Active Symbols */}
-            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-              <Target className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            {/* Active Trading Symbols */}
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">Symbols</span>
+                <span className="text-xs text-muted-foreground">Active Symbols</span>
                 <div className="flex items-center gap-1">
                   {config?.symbols && Object.keys(config.symbols).length > 0 ? (
                     <>
-                      <span className="text-sm font-semibold">{Object.keys(config.symbols).length}</span>
+                      <span className="text-lg font-semibold">{Object.keys(config.symbols).length}</span>
+                      <div className="flex gap-1 max-w-[200px] overflow-hidden">
+                        {Object.keys(config.symbols).slice(0, 3).map((symbol, _index) => (
+                          <Badge key={symbol} variant="outline" className="h-4 text-[10px] px-1">
+                            {symbol.replace('USDT', '')}
+                          </Badge>
+                        ))}
+                        {Object.keys(config.symbols).length > 3 && (
+                          <Badge variant="outline" className="h-4 text-[10px] px-1">
+                            +{Object.keys(config.symbols).length - 3}
+                          </Badge>
+                        )}
+                      </div>
                     </>
                   ) : (
-                    <span className="text-sm font-semibold text-muted-foreground">0</span>
+                    <span className="text-lg font-semibold text-muted-foreground">0</span>
                   )}
                 </div>
               </div>

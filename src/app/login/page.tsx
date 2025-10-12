@@ -20,10 +20,9 @@ function LoginForm() {
   const { data: _session, status } = useSession();
   const { config } = useConfig();
 
-  // Check if a custom password is configured (not the default "admin")
+  // Check if password is configured
   const isPasswordConfigured = config?.global?.server?.dashboardPassword &&
-    config.global.server.dashboardPassword.trim().length > 0 &&
-    config.global.server.dashboardPassword !== 'admin';
+    config.global.server.dashboardPassword.trim().length > 0;
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -109,6 +108,7 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoFocus
+                minLength={4}
               />
               {password.length > 0 && password.length < 4 && !(password === 'admin' && !isPasswordConfigured) && (
                 <p className="text-xs text-muted-foreground">

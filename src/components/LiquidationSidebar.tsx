@@ -175,7 +175,7 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
   };
 
   return (
-    <div className="w-72 border-l bg-card/50 backdrop-blur-sm hidden xl:block h-full overflow-hidden">
+    <div className="w-72 border-l bg-card/50 backdrop-blur-sm hidden lg:block h-full overflow-hidden">
       <div className="h-full flex flex-col">
         <div className="border-b p-3 flex-shrink-0">
           <div className="flex items-center justify-between">

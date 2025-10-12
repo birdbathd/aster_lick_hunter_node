@@ -26,6 +26,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { TrancheSettingsSection } from './TrancheSettingsSection';
 
 interface SymbolConfigFormProps {
   onSave: (config: Config) => void;
@@ -438,11 +439,12 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   <Input
                     id="riskPercent"
                     type="number"
-                    value={config.global.riskPercent || 0}
+                    value={config.global.riskPercent ?? ''}
                     onChange={(e) => {
                       const value = parseFloat(e.target.value);
                       handleGlobalChange('riskPercent', isNaN(value) ? 0 : value);
                     }}
+                    placeholder="90"
                     className="w-24"
                     min="0.1"
                     max="100"
@@ -453,7 +455,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Maximum percentage of your account to risk across all positions
+                  Maximum percentage of your account to risk across all positions (default: 90%)
                 </p>
               </div>
 
@@ -488,7 +490,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                 <Label htmlFor="positionMode">Position Mode</Label>
                 <select
                   id="positionMode"
-                  value={config.global.positionMode || 'ONE_WAY'}
+                  value={config.global.positionMode ?? 'HEDGE'}
                   onChange={(e) => handleGlobalChange('positionMode', e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -496,7 +498,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   <option value="HEDGE">Hedge Mode (LONG/SHORT)</option>
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  One-way: All positions use BOTH | Hedge: Separate LONG and SHORT positions
+                  One-way: All positions use BOTH | Hedge: Separate LONG and SHORT positions (default: HEDGE)
                 </p>
               </div>
 
@@ -506,18 +508,19 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   <Input
                     id="maxOpenPositions"
                     type="number"
-                    value={config.global.maxOpenPositions || 10}
+                    value={config.global.maxOpenPositions ?? ''}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
                       handleGlobalChange('maxOpenPositions', isNaN(value) ? 10 : value);
                     }}
+                    placeholder="5"
                     className="w-24"
                     min="1"
                     max="50"
                     step="1"
                   />
                   <span className="text-sm text-muted-foreground">
-                    Maximum concurrent positions (hedged pairs count as one)
+                    Maximum concurrent positions (default: 5, hedged pairs count as one)
                   </span>
                 </div>
               </div>
@@ -595,7 +598,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   <Input
                     id="dashboardPort"
                     type="number"
-                    value={config.global.server?.dashboardPort || 3000}
+                    value={config.global.server?.dashboardPort ?? ''}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
                       handleGlobalChange('server', {
@@ -603,6 +606,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                         dashboardPort: isNaN(value) ? 3000 : value
                       });
                     }}
+                    placeholder="3000"
                     className="w-24"
                     min="1024"
                     max="65535"
@@ -619,7 +623,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   <Input
                     id="websocketPort"
                     type="number"
-                    value={config.global.server?.websocketPort || 8080}
+                    value={config.global.server?.websocketPort ?? ''}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
                       handleGlobalChange('server', {
@@ -627,6 +631,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                         websocketPort: isNaN(value) ? 8080 : value
                       });
                     }}
+                    placeholder="8080"
                     className="w-24"
                     min="1024"
                     max="65535"
@@ -804,7 +809,8 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   </div>
 
                   {selectedSymbol && config.symbols[selectedSymbol] && (
-                    <Card>
+                    <>
+                      <Card>
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-lg">{selectedSymbol} Settings</CardTitle>
@@ -824,15 +830,16 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Long Volume Threshold (USDT)</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].longVolumeThresholdUSDT || config.symbols[selectedSymbol].volumeThresholdUSDT || 0}
+                            value={config.symbols[selectedSymbol].longVolumeThresholdUSDT ?? config.symbols[selectedSymbol].volumeThresholdUSDT ?? ''}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               handleSymbolChange(selectedSymbol, 'longVolumeThresholdUSDT', isNaN(value) ? 0 : value);
                             }}
+                            placeholder="10000"
                             min="0"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Min liquidation volume for longs (buy on sell liquidations)
+                            Min liquidation volume for longs (default: 10000 USDT)
                           </p>
                         </div>
 
@@ -840,15 +847,16 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Short Volume Threshold (USDT)</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].shortVolumeThresholdUSDT || config.symbols[selectedSymbol].volumeThresholdUSDT || 0}
+                            value={config.symbols[selectedSymbol].shortVolumeThresholdUSDT ?? config.symbols[selectedSymbol].volumeThresholdUSDT ?? ''}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               handleSymbolChange(selectedSymbol, 'shortVolumeThresholdUSDT', isNaN(value) ? 0 : value);
                             }}
+                            placeholder="10000"
                             min="0"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Min liquidation volume for shorts (sell on buy liquidations)
+                            Min liquidation volume for shorts (default: 10000 USDT)
                           </p>
                         </div>
 
@@ -856,16 +864,17 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Leverage</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].leverage || 1}
+                            value={config.symbols[selectedSymbol].leverage ?? ''}
                             onChange={(e) => {
                               const value = parseInt(e.target.value);
                               handleSymbolChange(selectedSymbol, 'leverage', isNaN(value) ? 1 : value);
                             }}
+                            placeholder="10"
                             min="1"
                             max="125"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Trading leverage (1-125x)
+                            Trading leverage (default: 10x)
                           </p>
                         </div>
 
@@ -923,17 +932,18 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                               <Label>Trade Size (USDT)</Label>
                               <Input
                                 type="number"
-                                value={config.symbols[selectedSymbol].tradeSize || 0}
+                                value={config.symbols[selectedSymbol].tradeSize ?? ''}
                                 onChange={(e) => {
                                   const value = parseFloat(e.target.value);
                                   handleSymbolChange(selectedSymbol, 'tradeSize', isNaN(value) ? 0 : value);
                                 }}
+                                placeholder="100"
                                 min="0"
                                 step="0.01"
                               />
                               <div className="space-y-1">
                                 <p className="text-xs text-muted-foreground">
-                                  Position size in USDT (used for both long and short)
+                                  Position size in USDT (default: 100, used for both long and short)
                                 </p>
                                 {symbolDetails && !loadingDetails && getMinimumMargin() && (
                                   <div className="flex flex-col gap-1">
@@ -1080,15 +1090,16 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Max Position Margin (USDT)</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].maxPositionMarginUSDT || 0}
+                            value={config.symbols[selectedSymbol].maxPositionMarginUSDT ?? ''}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               handleSymbolChange(selectedSymbol, 'maxPositionMarginUSDT', isNaN(value) ? 0 : value);
                             }}
+                            placeholder="10000"
                             min="0"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Max total margin exposure for this symbol
+                            Max total margin exposure for this symbol (default: 10000 USDT)
                           </p>
                         </div>
 
@@ -1096,16 +1107,17 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Stop Loss (%)</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].slPercent || 0}
+                            value={config.symbols[selectedSymbol].slPercent ?? ''}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               handleSymbolChange(selectedSymbol, 'slPercent', isNaN(value) ? 0 : value);
                             }}
+                            placeholder="2"
                             min="0.1"
                             step="0.1"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Stop loss percentage
+                            Stop loss percentage (default: 2%)
                           </p>
                         </div>
 
@@ -1113,16 +1125,17 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           <Label>Take Profit (%)</Label>
                           <Input
                             type="number"
-                            value={config.symbols[selectedSymbol].tpPercent || 0}
+                            value={config.symbols[selectedSymbol].tpPercent ?? ''}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               handleSymbolChange(selectedSymbol, 'tpPercent', isNaN(value) ? 0 : value);
                             }}
+                            placeholder="3"
                             min="0.1"
                             step="0.1"
                           />
                           <p className="text-xs text-muted-foreground">
-                            Take profit percentage
+                            Take profit percentage (default: 3%)
                           </p>
                         </div>
 
@@ -1133,13 +1146,13 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                             <div className="space-y-2">
                               <Label>Order Type</Label>
                               <Select
-                                value={config.symbols[selectedSymbol].orderType || 'LIMIT'}
+                                value={config.symbols[selectedSymbol].orderType ?? 'LIMIT'}
                                 onValueChange={(value) =>
                                   handleSymbolChange(selectedSymbol, 'orderType', value)
                                 }
                               >
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="LIMIT (default)" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="LIMIT">LIMIT Orders (Better fills)</SelectItem>
@@ -1147,7 +1160,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                 </SelectContent>
                               </Select>
                               <p className="text-xs text-muted-foreground">
-                                Default order type for opening positions
+                                Default order type for opening positions (default: LIMIT)
                               </p>
                             </div>
 
@@ -1205,13 +1218,13 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                 <div className="space-y-2">
                                   <Label>VWAP Timeframe</Label>
                                   <Select
-                                    value={config.symbols[selectedSymbol].vwapTimeframe || '1m'}
+                                    value={config.symbols[selectedSymbol].vwapTimeframe ?? '1m'}
                                     onValueChange={(value) =>
                                       handleSymbolChange(selectedSymbol, 'vwapTimeframe', value)
                                     }
                                   >
                                     <SelectTrigger>
-                                      <SelectValue />
+                                      <SelectValue placeholder="1m (default)" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="1m">1 minute</SelectItem>
@@ -1222,7 +1235,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                     </SelectContent>
                                   </Select>
                                   <p className="text-xs text-muted-foreground">
-                                    Candle timeframe for VWAP calculation
+                                    Candle timeframe for VWAP calculation (default: 1m)
                                   </p>
                                 </div>
 
@@ -1230,20 +1243,29 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                   <Label>Lookback Period</Label>
                                   <Input
                                     type="number"
-                                    value={config.symbols[selectedSymbol].vwapLookback || 100}
+                                    value={config.symbols[selectedSymbol].vwapLookback !== undefined ? config.symbols[selectedSymbol].vwapLookback : ''}
                                     onChange={(e) => {
                                       const value = parseInt(e.target.value);
-                                      handleSymbolChange(
-                                        selectedSymbol,
-                                        'vwapLookback',
-                                        isNaN(value) ? 100 : value
-                                      );
+                                      if (e.target.value === '' || isNaN(value)) {
+                                        // Remove the field if empty - will use default from config.default.json
+                                        const { vwapLookback, ...rest } = config.symbols[selectedSymbol];
+                                        setConfig({
+                                          ...config,
+                                          symbols: {
+                                            ...config.symbols,
+                                            [selectedSymbol]: rest,
+                                          },
+                                        });
+                                      } else {
+                                        handleSymbolChange(selectedSymbol, 'vwapLookback', value);
+                                      }
                                     }}
+                                    placeholder="100"
                                     min="10"
                                     max="500"
                                   />
                                   <p className="text-xs text-muted-foreground">
-                                    Number of candles for VWAP (10-500)
+                                    Number of candles for VWAP (default: 100)
                                   </p>
                                 </div>
                               </div>
@@ -1291,12 +1313,24 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                       <Label>Time Window (seconds)</Label>
                                       <Input
                                         type="number"
-                                        value={(config.symbols[selectedSymbol].thresholdTimeWindow || 60000) / 1000}
+                                        value={config.symbols[selectedSymbol].thresholdTimeWindow !== undefined ? config.symbols[selectedSymbol].thresholdTimeWindow / 1000 : ''}
                                         onChange={(e) => {
                                           const seconds = parseFloat(e.target.value);
-                                          const ms = isNaN(seconds) ? 60000 : seconds * 1000;
-                                          handleSymbolChange(selectedSymbol, 'thresholdTimeWindow', ms);
+                                          if (e.target.value === '' || isNaN(seconds)) {
+                                            // Remove the field if empty - will use default from config.default.json
+                                            const { thresholdTimeWindow, ...rest } = config.symbols[selectedSymbol];
+                                            setConfig({
+                                              ...config,
+                                              symbols: {
+                                                ...config.symbols,
+                                                [selectedSymbol]: rest,
+                                              },
+                                            });
+                                          } else {
+                                            handleSymbolChange(selectedSymbol, 'thresholdTimeWindow', seconds * 1000);
+                                          }
                                         }}
+                                        placeholder="60"
                                         min="10"
                                         max="300"
                                         step="10"
@@ -1310,12 +1344,24 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                                       <Label>Cooldown Period (seconds)</Label>
                                       <Input
                                         type="number"
-                                        value={(config.symbols[selectedSymbol].thresholdCooldown || 30000) / 1000}
+                                        value={config.symbols[selectedSymbol].thresholdCooldown !== undefined ? config.symbols[selectedSymbol].thresholdCooldown / 1000 : ''}
                                         onChange={(e) => {
                                           const seconds = parseFloat(e.target.value);
-                                          const ms = isNaN(seconds) ? 30000 : seconds * 1000;
-                                          handleSymbolChange(selectedSymbol, 'thresholdCooldown', ms);
+                                          if (e.target.value === '' || isNaN(seconds)) {
+                                            // Remove the field if empty - will use default from config.default.json
+                                            const { thresholdCooldown, ...rest } = config.symbols[selectedSymbol];
+                                            setConfig({
+                                              ...config,
+                                              symbols: {
+                                                ...config.symbols,
+                                                [selectedSymbol]: rest,
+                                              },
+                                            });
+                                          } else {
+                                            handleSymbolChange(selectedSymbol, 'thresholdCooldown', seconds * 1000);
+                                          }
                                         }}
+                                        placeholder="30"
                                         min="10"
                                         max="300"
                                         step="10"
@@ -1340,17 +1386,25 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                         )}
                       </CardContent>
                     </Card>
-                  )}
-                </>
-              )}
 
-              {Object.keys(config.symbols).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Settings2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No symbols configured yet</p>
-                  <p className="text-sm">Add a symbol above to get started</p>
-                </div>
-              )}
+                    {/* Multi-Tranche Position Management */}
+                    <TrancheSettingsSection
+                      symbol={selectedSymbol}
+                      config={config.symbols[selectedSymbol]}
+                      onChange={(field, value) => handleSymbolChange(selectedSymbol, field, value)}
+                    />
+                  </>
+                )}
+              </>
+            )}
+
+            {Object.keys(config.symbols).length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Settings2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No symbols configured yet</p>
+                <p className="text-sm">Add a symbol above to get started</p>
+              </div>
+            )}
             </CardContent>
           </Card>
         </TabsContent>

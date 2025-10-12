@@ -39,6 +39,7 @@ class AsterBot {
   private positionManager: PositionManager | null = null;
   private config: Config | null = null;
   private isRunning = false;
+  private isPaused = false;
   private statusBroadcaster: StatusBroadcaster;
   private isHedgeMode: boolean = false;
   private tradeSizeWarnings: any[] = [];
@@ -159,6 +160,20 @@ logErrorWithTimestamp('❌ Config error:', error.message);
           }
         );
         this.statusBroadcaster.addError(`Config: ${error.message}`);
+      });
+
+      // Listen for bot control commands from web UI
+      this.statusBroadcaster.on('bot_control', async (action: string) => {
+        switch (action) {
+          case 'pause':
+            await this.pause();
+            break;
+          case 'resume':
+            await this.resume();
+            break;
+          default:
+            logWarnWithTimestamp(`Unknown bot control action: ${action}`);
+        }
       });
 
       // Check API keys
@@ -372,6 +387,95 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
         }
       }
 
+      // Initialize Tranche Manager (if enabled for any symbol)
+      const trancheEnabledSymbols = Object.entries(this.config.symbols).filter(
+        ([_symbol, config]) => config.enableTrancheManagement
+      );
+
+      if (trancheEnabledSymbols.length > 0) {
+        try {
+          const { initializeTrancheManager, getTrancheManager } = await import('../lib/services/trancheManager');
+          const trancheManager = initializeTrancheManager(this.config);
+          await trancheManager.initialize();
+
+          // Connect tranche events to status broadcaster
+          trancheManager.on('trancheCreated', (tranche) => {
+            this.statusBroadcaster.broadcastTrancheCreated({
+              trancheId: tranche.id,
+              symbol: tranche.symbol,
+              side: tranche.side,
+              entryPrice: tranche.entryPrice,
+              quantity: tranche.quantity,
+              marginUsed: tranche.marginUsed,
+              leverage: tranche.leverage,
+              tpPrice: tranche.tpPrice,
+              slPrice: tranche.slPrice,
+            });
+            logWithTimestamp(`📊 Tranche created: ${tranche.id.substring(0, 8)} for ${tranche.symbol} ${tranche.side}`);
+          });
+
+          trancheManager.on('trancheIsolated', (tranche) => {
+            const symbolConfig = this.config?.symbols[tranche.symbol];
+            const currentPrice = tranche.isolationPrice || 0;
+            const pnlPercent = tranche.side === 'LONG'
+              ? ((currentPrice - tranche.entryPrice) / tranche.entryPrice) * 100
+              : ((tranche.entryPrice - currentPrice) / tranche.entryPrice) * 100;
+
+            this.statusBroadcaster.broadcastTrancheIsolated({
+              trancheId: tranche.id,
+              symbol: tranche.symbol,
+              side: tranche.side,
+              entryPrice: tranche.entryPrice,
+              currentPrice,
+              unrealizedPnl: tranche.unrealizedPnl,
+              pnlPercent,
+              isolationThreshold: symbolConfig?.trancheIsolationThreshold || 5,
+            });
+            logWithTimestamp(`⚠️  Tranche isolated: ${tranche.id.substring(0, 8)} for ${tranche.symbol} (${pnlPercent.toFixed(2)}% loss)`);
+          });
+
+          trancheManager.on('trancheClosed', (tranche) => {
+            this.statusBroadcaster.broadcastTrancheClosed({
+              trancheId: tranche.id,
+              symbol: tranche.symbol,
+              side: tranche.side,
+              entryPrice: tranche.entryPrice,
+              exitPrice: tranche.exitPrice || 0,
+              quantity: tranche.quantity,
+              realizedPnl: tranche.realizedPnl,
+              closedFully: tranche.status === 'closed',
+              orderId: tranche.exitOrderId,
+            });
+            logWithTimestamp(`💰 Tranche closed: ${tranche.id.substring(0, 8)} for ${tranche.symbol} (PnL: $${tranche.realizedPnl.toFixed(2)})`);
+          });
+
+          trancheManager.on('tranchePartialClose', (tranche) => {
+            this.statusBroadcaster.broadcastTrancheClosed({
+              trancheId: tranche.id,
+              symbol: tranche.symbol,
+              side: tranche.side,
+              entryPrice: tranche.entryPrice,
+              exitPrice: 0, // Partial close - exit price varies
+              quantity: tranche.quantity,
+              realizedPnl: tranche.realizedPnl,
+              closedFully: false,
+            });
+            logWithTimestamp(`📉 Tranche partially closed: ${tranche.id.substring(0, 8)} for ${tranche.symbol}`);
+          });
+
+          // Start periodic isolation monitoring
+          trancheManager.startIsolationMonitoring(10000); // Check every 10 seconds
+
+          logWithTimestamp(`✅ Tranche Manager initialized for ${trancheEnabledSymbols.length} symbol(s): ${trancheEnabledSymbols.map(([s]) => s).join(', ')}`);
+        } catch (error: any) {
+          logErrorWithTimestamp('⚠️  Tranche Manager failed to start:', error.message);
+          this.statusBroadcaster.addError(`Tranche Manager: ${error.message}`);
+          // Continue without tranche management
+        }
+      } else {
+        logWithTimestamp('ℹ️  Tranche Management disabled for all symbols');
+      }
+
       // Initialize Hunter
       this.hunter = new Hunter(this.config, this.isHedgeMode);
 
@@ -499,6 +603,98 @@ logErrorWithTimestamp('❌ Unhandled rejection at:', promise, 'reason:', reason)
     } catch (error) {
 logErrorWithTimestamp('❌ Failed to start bot:', error);
       process.exit(1);
+    }
+  }
+
+  async pause(): Promise<void> {
+    if (!this.isRunning || this.isPaused) {
+logWithTimestamp('⚠️  Cannot pause: Bot is not running or already paused');
+      return;
+    }
+
+    try {
+logWithTimestamp('⏸️  Pausing bot...');
+      this.isPaused = true;
+      this.statusBroadcaster.setBotState('paused');
+
+      // Stop the hunter from placing new trades
+      if (this.hunter) {
+        this.hunter.pause();
+logWithTimestamp('✅ Hunter paused (no new trades will be placed)');
+      }
+
+logWithTimestamp('✅ Bot paused - existing positions will continue to be monitored');
+      this.statusBroadcaster.logActivity('Bot paused');
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while pausing bot:', error);
+      this.statusBroadcaster.addError(`Failed to pause: ${error}`);
+    }
+  }
+
+  async resume(): Promise<void> {
+    if (!this.isRunning || !this.isPaused) {
+logWithTimestamp('⚠️  Cannot resume: Bot is not running or not paused');
+      return;
+    }
+
+    try {
+logWithTimestamp('▶️  Resuming bot...');
+      this.isPaused = false;
+      this.statusBroadcaster.setBotState('running');
+
+      // Resume the hunter
+      if (this.hunter) {
+        this.hunter.resume();
+logWithTimestamp('✅ Hunter resumed');
+      }
+
+logWithTimestamp('✅ Bot resumed - trading active');
+      this.statusBroadcaster.logActivity('Bot resumed');
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while resuming bot:', error);
+      this.statusBroadcaster.addError(`Failed to resume: ${error}`);
+    }
+  }
+
+  async stopAndCloseAll(): Promise<void> {
+    if (!this.isRunning) {
+logWithTimestamp('⚠️  Cannot stop: Bot is not running');
+      return;
+    }
+
+    try {
+logWithTimestamp('🛑 Stopping bot and closing all positions...');
+      this.isPaused = false;
+      this.statusBroadcaster.setBotState('stopped');
+
+      // Stop the hunter first
+      if (this.hunter) {
+        this.hunter.stop();
+logWithTimestamp('✅ Hunter stopped');
+      }
+
+      // Close all positions
+      if (this.positionManager) {
+        const positions = this.positionManager.getPositions();
+        if (positions.length > 0) {
+logWithTimestamp(`📊 Closing ${positions.length} open position(s)...`);
+          await this.positionManager.closeAllPositions();
+logWithTimestamp('✅ All positions closed');
+        } else {
+logWithTimestamp('ℹ️  No open positions to close');
+        }
+      }
+
+logWithTimestamp('✅ Bot stopped and all positions closed');
+      this.statusBroadcaster.logActivity('Bot stopped and all positions closed');
+
+      // Don't actually exit the process - just set state to stopped
+      // This allows the bot to be restarted from the UI
+      this.isRunning = false;
+      this.statusBroadcaster.setRunning(false);
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while stopping bot:', error);
+      this.statusBroadcaster.addError(`Failed to stop: ${error}`);
     }
   }
 

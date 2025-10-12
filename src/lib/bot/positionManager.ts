@@ -2734,4 +2734,65 @@ logErrorWithTimestamp('PositionManager: Failed to refresh balance:', error);
   public getPositionsMap(): Map<string, ExchangePosition> {
     return this.currentPositions;
   }
+
+  // Close all open positions (used by bot stop command)
+  public async closeAllPositions(): Promise<void> {
+    const positions = this.getPositions().filter(p => Math.abs(parseFloat(p.positionAmt)) > 0);
+
+    if (positions.length === 0) {
+logWithTimestamp('PositionManager: No positions to close');
+      return;
+    }
+
+logWithTimestamp(`PositionManager: Closing ${positions.length} position(s)...`);
+
+    for (const position of positions) {
+      try {
+        const symbol = position.symbol;
+        const positionAmt = parseFloat(position.positionAmt);
+        const side = positionAmt > 0 ? 'SELL' : 'BUY';
+        const quantity = Math.abs(positionAmt);
+
+        // Cancel any open orders for this position
+        try {
+          const openOrders = await this.getOpenOrdersFromExchange();
+          const ordersForSymbol = openOrders.filter(o => o.symbol === symbol);
+
+          for (const order of ordersForSymbol) {
+            await this.cancelOrderById(symbol, order.orderId);
+logWithTimestamp(`PositionManager: Cancelled order ${order.orderId} for ${symbol}`);
+          }
+        } catch (error) {
+logErrorWithTimestamp(`PositionManager: Failed to cancel orders for ${symbol}:`, error);
+        }
+
+        // Close position with market order
+        const positionSide = position.positionSide === 'LONG' ? 'LONG' : position.positionSide === 'SHORT' ? 'SHORT' : 'BOTH';
+
+        await placeOrder({
+          symbol,
+          side,
+          type: 'MARKET',
+          quantity,
+          positionSide,
+          reduceOnly: true
+        }, this.config.api);
+
+logWithTimestamp(`PositionManager: Closed position ${symbol} ${positionSide} - ${quantity} @ MARKET`);
+
+        if (this.statusBroadcaster) {
+          this.statusBroadcaster.broadcastPositionClosed({
+            symbol,
+            side: positionSide,
+            quantity,
+            reason: 'Bot stopped - position closed by user'
+          });
+        }
+      } catch (error) {
+logErrorWithTimestamp(`PositionManager: Failed to close position ${position.symbol}:`, error);
+      }
+    }
+
+logWithTimestamp('PositionManager: Finished closing all positions');
+  }
 }

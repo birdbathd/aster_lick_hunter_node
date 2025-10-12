@@ -16,6 +16,7 @@ import { LogOut } from "lucide-react"
 import { useConfig } from "@/components/ConfigProvider"
 import { signOut } from "next-auth/react"
 import { RateLimitBarCompact } from "@/components/RateLimitBar"
+import BotControlButtons from "@/components/BotControlButtons"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -58,6 +59,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <div className="flex flex-1 items-center justify-end">
             <div className="flex items-center gap-4">
+              {/* Bot Control Buttons */}
+              <BotControlButtons />
+              <Separator orientation="vertical" className="h-4" />
               {/* External Links */}
               <div className="flex items-center gap-3">
                 {/* GitHub */}

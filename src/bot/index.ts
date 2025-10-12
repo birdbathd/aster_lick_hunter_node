@@ -39,6 +39,7 @@ class AsterBot {
   private positionManager: PositionManager | null = null;
   private config: Config | null = null;
   private isRunning = false;
+  private isPaused = false;
   private statusBroadcaster: StatusBroadcaster;
   private isHedgeMode: boolean = false;
   private tradeSizeWarnings: any[] = [];
@@ -159,6 +160,20 @@ logErrorWithTimestamp('❌ Config error:', error.message);
           }
         );
         this.statusBroadcaster.addError(`Config: ${error.message}`);
+      });
+
+      // Listen for bot control commands from web UI
+      this.statusBroadcaster.on('bot_control', async (action: string) => {
+        switch (action) {
+          case 'pause':
+            await this.pause();
+            break;
+          case 'resume':
+            await this.resume();
+            break;
+          default:
+            logWarnWithTimestamp(`Unknown bot control action: ${action}`);
+        }
       });
 
       // Check API keys
@@ -499,6 +514,98 @@ logErrorWithTimestamp('❌ Unhandled rejection at:', promise, 'reason:', reason)
     } catch (error) {
 logErrorWithTimestamp('❌ Failed to start bot:', error);
       process.exit(1);
+    }
+  }
+
+  async pause(): Promise<void> {
+    if (!this.isRunning || this.isPaused) {
+logWithTimestamp('⚠️  Cannot pause: Bot is not running or already paused');
+      return;
+    }
+
+    try {
+logWithTimestamp('⏸️  Pausing bot...');
+      this.isPaused = true;
+      this.statusBroadcaster.setBotState('paused');
+
+      // Stop the hunter from placing new trades
+      if (this.hunter) {
+        this.hunter.pause();
+logWithTimestamp('✅ Hunter paused (no new trades will be placed)');
+      }
+
+logWithTimestamp('✅ Bot paused - existing positions will continue to be monitored');
+      this.statusBroadcaster.logActivity('Bot paused');
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while pausing bot:', error);
+      this.statusBroadcaster.addError(`Failed to pause: ${error}`);
+    }
+  }
+
+  async resume(): Promise<void> {
+    if (!this.isRunning || !this.isPaused) {
+logWithTimestamp('⚠️  Cannot resume: Bot is not running or not paused');
+      return;
+    }
+
+    try {
+logWithTimestamp('▶️  Resuming bot...');
+      this.isPaused = false;
+      this.statusBroadcaster.setBotState('running');
+
+      // Resume the hunter
+      if (this.hunter) {
+        this.hunter.resume();
+logWithTimestamp('✅ Hunter resumed');
+      }
+
+logWithTimestamp('✅ Bot resumed - trading active');
+      this.statusBroadcaster.logActivity('Bot resumed');
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while resuming bot:', error);
+      this.statusBroadcaster.addError(`Failed to resume: ${error}`);
+    }
+  }
+
+  async stopAndCloseAll(): Promise<void> {
+    if (!this.isRunning) {
+logWithTimestamp('⚠️  Cannot stop: Bot is not running');
+      return;
+    }
+
+    try {
+logWithTimestamp('🛑 Stopping bot and closing all positions...');
+      this.isPaused = false;
+      this.statusBroadcaster.setBotState('stopped');
+
+      // Stop the hunter first
+      if (this.hunter) {
+        this.hunter.stop();
+logWithTimestamp('✅ Hunter stopped');
+      }
+
+      // Close all positions
+      if (this.positionManager) {
+        const positions = this.positionManager.getPositions();
+        if (positions.length > 0) {
+logWithTimestamp(`📊 Closing ${positions.length} open position(s)...`);
+          await this.positionManager.closeAllPositions();
+logWithTimestamp('✅ All positions closed');
+        } else {
+logWithTimestamp('ℹ️  No open positions to close');
+        }
+      }
+
+logWithTimestamp('✅ Bot stopped and all positions closed');
+      this.statusBroadcaster.logActivity('Bot stopped and all positions closed');
+
+      // Don't actually exit the process - just set state to stopped
+      // This allows the bot to be restarted from the UI
+      this.isRunning = false;
+      this.statusBroadcaster.setRunning(false);
+    } catch (error) {
+logErrorWithTimestamp('❌ Error while stopping bot:', error);
+      this.statusBroadcaster.addError(`Failed to stop: ${error}`);
     }
   }
 

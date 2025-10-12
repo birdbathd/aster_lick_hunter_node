@@ -6,6 +6,7 @@ import { getRateLimitManager } from '../lib/api/rateLimitManager';
 
 export interface BotStatus {
   isRunning: boolean;
+  botState?: 'running' | 'paused' | 'stopped';
   paperMode: boolean;
   uptime: number;
   startTime: Date | null;
@@ -28,6 +29,7 @@ export class StatusBroadcaster extends EventEmitter {
   private clients: Set<WebSocket> = new Set();
   private status: BotStatus = {
     isRunning: false,
+    botState: 'stopped',
     paperMode: true,
     uptime: 0,
     startTime: null,
@@ -83,6 +85,22 @@ export class StatusBroadcaster extends EventEmitter {
                   });
                   console.error('❌ Config reload failed:', error);
                 }
+                break;
+
+              case 'bot_control':
+                // Handle bot control commands (pause, resume, stop)
+                const { action } = message;
+                console.log(`🎮 Bot control requested: ${action}`);
+
+                // Emit event for AsterBot to handle
+                this.emit('bot_control', action);
+
+                // Send acknowledgment
+                ws.send(JSON.stringify({
+                  type: 'bot_control_ack',
+                  action,
+                  timestamp: Date.now()
+                }));
                 break;
 
               case 'ping':
@@ -165,6 +183,7 @@ export class StatusBroadcaster extends EventEmitter {
 
   setRunning(isRunning: boolean): void {
     this.status.isRunning = isRunning;
+    this.status.botState = isRunning ? 'running' : 'stopped';
     if (isRunning) {
       this.status.startTime = new Date();
       this.status.uptime = 0;
@@ -172,6 +191,11 @@ export class StatusBroadcaster extends EventEmitter {
       this.status.startTime = null;
       this.status.uptime = 0;
     }
+    this._broadcast('status', this.status);
+  }
+
+  setBotState(state: 'running' | 'paused' | 'stopped'): void {
+    this.status.botState = state;
     this._broadcast('status', this.status);
   }
 

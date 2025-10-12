@@ -28,6 +28,7 @@ export class Hunter extends EventEmitter {
   private ws: WebSocket | null = null;
   private config: Config;
   private isRunning = false;
+  private isPaused = false;
   private statusBroadcaster: any; // Will be injected
   private isHedgeMode: boolean;
   private positionTracker: PositionTracker | null = null;
@@ -317,6 +318,7 @@ logWithTimestamp('Hunter: Running in paper mode without API keys - simulating li
 
   stop(): void {
     this.isRunning = false;
+    this.isPaused = false;
 
     // Stop periodic cleanup
     this.stopPeriodicCleanup();
@@ -332,6 +334,24 @@ logWithTimestamp('Hunter: Stopped periodic position mode sync');
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  pause(): void {
+    if (!this.isRunning || this.isPaused) {
+logWithTimestamp('Hunter: Cannot pause - not running or already paused');
+      return;
+    }
+    this.isPaused = true;
+logWithTimestamp('Hunter: Paused - no new trades will be placed');
+  }
+
+  resume(): void {
+    if (!this.isRunning || !this.isPaused) {
+logWithTimestamp('Hunter: Cannot resume - not running or not paused');
+      return;
+    }
+    this.isPaused = false;
+logWithTimestamp('Hunter: Resumed - trading active');
   }
 
   private connectWebSocket(): void {
@@ -571,6 +591,12 @@ logWithTimestamp(`Hunter: ✓ Cooldown passed - Triggering ${tradeSide} trade fo
   }
 
   private async analyzeAndTrade(liquidation: LiquidationEvent, symbolConfig: SymbolConfig, _forcedSide?: 'BUY' | 'SELL'): Promise<void> {
+    // Check if bot is paused
+    if (this.isPaused) {
+logWithTimestamp(`Hunter: Skipping trade - bot is paused (${liquidation.symbol} ${liquidation.side})`);
+      return;
+    }
+
     try {
       // Get mark price and recent 1m kline
       const [markPriceData] = Array.isArray(await getMarkPrice(liquidation.symbol)) ?

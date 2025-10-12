@@ -37,9 +37,9 @@ export const POST = withAuth(async (request: NextRequest, _user) => {
     const body = await request.json();
     const { action } = body;
 
-    if (!action || !['pause', 'resume', 'stop'].includes(action)) {
+    if (!action || !['pause', 'resume'].includes(action)) {
       return NextResponse.json(
-        { error: 'Invalid action. Must be one of: pause, resume, stop' },
+        { error: 'Invalid action. Must be one of: pause, resume' },
         { status: 400 }
       );
     }

@@ -12,6 +12,7 @@ import { errorLogger } from '../services/errorLogger';
 import { getPriceService } from '../services/priceService';
 import { invalidateIncomeCache } from '../api/income';
 import { logWithTimestamp, logErrorWithTimestamp, logWarnWithTimestamp } from '../utils/timestamp';
+import { paperModeSimulator } from '../services/paperModeSimulator';
 
 // Minimal local state - only track order IDs linked to positions
 interface PositionOrders {
@@ -185,10 +186,49 @@ logErrorWithTimestamp('PositionManager: Failed to fetch exchange info:', error.m
       // Continue anyway - will use raw values
     }
 
-    // Skip user data stream in paper mode with no API keys
-    if (this.config.global.paperMode && (!this.config.api.apiKey || !this.config.api.secretKey)) {
-logWithTimestamp('PositionManager: Running in paper mode without API keys - simulating streams');
-      return;
+    // In paper mode, initialize the paper mode simulator instead of real streams
+    if (this.config.global.paperMode) {
+logWithTimestamp('PositionManager: Running in PAPER MODE - initializing simulator');
+
+      // Initialize paper mode simulator
+      paperModeSimulator.initialize(this.config);
+      paperModeSimulator.start();
+
+      // Listen for paper mode events and broadcast to UI
+      paperModeSimulator.on('positionOpened', (data) => {
+        if (this.statusBroadcaster) {
+          this.statusBroadcaster.broadcastPositionUpdate({
+            symbol: data.symbol,
+            side: data.side,
+            quantity: data.quantity,
+            price: data.entryPrice,
+            type: 'opened',
+            paperMode: true
+          });
+        }
+      });
+
+      paperModeSimulator.on('positionClosed', (data) => {
+        if (this.statusBroadcaster) {
+          this.statusBroadcaster.broadcastPositionClosed({
+            symbol: data.symbol,
+            side: data.side,
+            quantity: 0, // Not tracked in paper mode
+            pnl: data.pnlUSDT,
+            reason: data.reason,
+            paperMode: true
+          });
+        }
+      });
+
+      paperModeSimulator.on('pnlUpdate', (data) => {
+        if (this.statusBroadcaster) {
+          this.statusBroadcaster.broadcast('paper_mode_pnl', data);
+        }
+      });
+
+logWithTimestamp('✅ Paper mode simulator active - positions will be tracked and simulated');
+      return; // Don't start real WebSocket streams
     }
 
     try {
@@ -205,6 +245,12 @@ logErrorWithTimestamp('PositionManager: Failed to start:', error);
   async stop(): Promise<void> {
     this.isRunning = false;
 logWithTimestamp('PositionManager: Stopping...');
+
+    // Stop paper mode simulator if in paper mode
+    if (this.config.global.paperMode) {
+      paperModeSimulator.stop();
+logWithTimestamp('PositionManager: Paper mode simulator stopped');
+    }
 
     if (this.keepaliveInterval) clearInterval(this.keepaliveInterval);
     if (this.riskCheckInterval) clearInterval(this.riskCheckInterval);
@@ -1214,36 +1260,30 @@ logWithTimestamp(`PositionManager: Position ${key} is closed, removing order tra
   }
 
   // Listen for new positions from Hunter
-  public onNewPosition(data: { symbol: string; side: string; quantity: number; orderId?: number }): void {
+  public async onNewPosition(data: { symbol: string; side: string; quantity: number; orderId?: number; paperMode?: boolean }): Promise<void> {
     // In the new architecture, we wait for ACCOUNT_UPDATE to confirm the position
     // The WebSocket will tell us when the position is actually open
 logWithTimestamp(`PositionManager: Notified of potential new position: ${data.symbol} ${data.side}`);
 
-    // For paper mode, simulate the position
-    if (this.config.global.paperMode) {
-      // Use the proper position side based on hedge mode
-      const positionSide = this.isHedgeMode ?
-        (data.side === 'BUY' ? 'LONG' : 'SHORT') : 'BOTH';
-      const key = `${data.symbol}_${positionSide}`;
+    // For paper mode, use the paper mode simulator
+    if (this.config.global.paperMode || data.paperMode) {
+      const symbolConfig = this.config.symbols[data.symbol];
+      if (!symbolConfig) {
+logErrorWithTimestamp(`PositionManager: Cannot open paper mode position - ${data.symbol} not in config`);
+        return;
+      }
 
-      // Simulate the position in our map
-      this.currentPositions.set(key, {
+logWithTimestamp(`PositionManager: Opening paper mode position for ${data.symbol} ${data.side}`);
+
+      // Open simulated position with proper SL/TP
+      await paperModeSimulator.openPosition({
         symbol: data.symbol,
-        positionAmt: data.side === 'BUY' ? data.quantity.toString() : (-data.quantity).toString(),
-        entryPrice: '0', // Will be updated by market price
-        markPrice: '0',
-        unRealizedProfit: '0',
-        liquidationPrice: '0',
-        leverage: this.config.symbols[data.symbol]?.leverage?.toString() || '10',
-        marginType: 'isolated',
-        isolatedMargin: '0',
-        isAutoAddMargin: 'false',
-        positionSide: positionSide,
-        updateTime: Date.now()
+        side: data.side as 'BUY' | 'SELL',
+        quantity: data.quantity,
+        leverage: symbolConfig.leverage || 10,
+        slPercent: symbolConfig.slPercent || 2,
+        tpPercent: symbolConfig.tpPercent || 5,
       });
-
-      // Place SL/TP for paper mode
-      this.ensurePositionProtected(data.symbol, positionSide, data.side === 'BUY' ? data.quantity : -data.quantity);
     }
   }
 

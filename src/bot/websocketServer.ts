@@ -317,6 +317,7 @@ export class StatusBroadcaster extends EventEmitter {
     price: number;
     type: 'opened' | 'closed' | 'updated';
     pnl?: number;
+    paperMode?: boolean;
   }): void {
     this._broadcast('position_update', {
       ...data,
@@ -413,6 +414,7 @@ export class StatusBroadcaster extends EventEmitter {
     quantity: number;
     pnl?: number;
     reason?: string;
+    paperMode?: boolean;
   }): void {
     this._broadcast('position_closed', {
       ...data,

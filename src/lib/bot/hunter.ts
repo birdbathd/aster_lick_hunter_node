@@ -307,9 +307,9 @@ logErrorWithTimestamp('Hunter: Failed to initialize symbol precision manager:', 
       // Continue anyway, will use default precision values
     }
 
-    // In paper mode with no API keys, simulate liquidation events
-    if (this.config.global.paperMode && (!this.config.api.apiKey || !this.config.api.secretKey)) {
-logWithTimestamp('Hunter: Running in paper mode without API keys - simulating liquidations');
+    // In paper mode, simulate liquidation events (regardless of API keys)
+    if (this.config.global.paperMode) {
+logWithTimestamp('Hunter: Running in PAPER MODE - simulating liquidations with real market prices');
       this.simulateLiquidations();
     } else {
       this.connectWebSocket();
@@ -1565,34 +1565,73 @@ logWithTimestamp('Hunter: No symbols configured for simulation');
       return;
     }
 
-    // Generate random liquidation events every 5-10 seconds
-    const generateEvent = () => {
+    // Generate realistic liquidation events using actual market prices
+    const generateEvent = async () => {
       if (!this.isRunning) return;
 
-      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-      const side = Math.random() > 0.5 ? 'SELL' : 'BUY';
-      const price = symbol === 'BTCUSDT' ? 40000 + Math.random() * 5000 : 2000 + Math.random() * 500;
-      const qty = Math.random() * 10;
+      try {
+        // Pick a random symbol from config
+        const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+        const symbolConfig = this.config.symbols[symbol];
 
-      const mockEvent = {
-        o: {
-          s: symbol,
-          S: side,
-          p: price.toString(),
-          q: qty.toString(),
-          T: Date.now()
-        }
-      };
+        // Fetch real market price
+        const markPriceData = await getMarkPrice(symbol);
+        const currentPrice = parseFloat(
+          Array.isArray(markPriceData) ? markPriceData[0].markPrice : markPriceData.markPrice
+        );
 
-logWithTimestamp(`Hunter: Simulated liquidation - ${symbol} ${side} ${qty.toFixed(4)} @ $${price.toFixed(2)}`);
-      this.handleLiquidationEvent(mockEvent);
+        // Random side with slight bias
+        const side = Math.random() > 0.5 ? 'SELL' : 'BUY';
 
-      // Schedule next event
-      const delay = 5000 + Math.random() * 5000; // 5-10 seconds
+        // Simulate price with small variance (±0.5%)
+        const priceVariance = 0.005;
+        const simulatedPrice = currentPrice * (1 + (Math.random() - 0.5) * priceVariance);
+
+        // Calculate realistic quantity based on configured thresholds
+        const thresholdUSDT = side === 'SELL'
+          ? (symbolConfig.longVolumeThresholdUSDT || 1000)
+          : (symbolConfig.shortVolumeThresholdUSDT || 1000);
+
+        // Generate quantity that's 1-3x the threshold
+        const volumeMultiplier = 1 + Math.random() * 2;
+        const volumeUSDT = thresholdUSDT * volumeMultiplier;
+        const qty = volumeUSDT / simulatedPrice;
+
+        const mockEvent = {
+          e: 'forceOrder',
+          o: {
+            s: symbol,
+            S: side,
+            o: 'LIMIT',
+            p: simulatedPrice.toString(),
+            q: qty.toString(),
+            ap: simulatedPrice.toString(),
+            X: 'FILLED',
+            l: qty.toString(),
+            z: qty.toString(),
+            T: Date.now()
+          },
+          E: Date.now()
+        };
+
+logWithTimestamp(
+          `Hunter: [PAPER MODE] Simulated liquidation - ${symbol} ${side} ` +
+          `${volumeUSDT.toFixed(0)} USDT @ $${simulatedPrice.toFixed(4)}`
+        );
+
+        // Handle the simulated liquidation event
+        await this.handleLiquidationEvent(mockEvent);
+      } catch (error) {
+logErrorWithTimestamp('Hunter: Error generating simulated liquidation:', error);
+      }
+
+      // Schedule next event (random interval 10-30 seconds for more realistic behavior)
+      const delay = 10000 + Math.random() * 20000;
       setTimeout(generateEvent, delay);
     };
 
-    // Start generating events after 2 seconds
-    setTimeout(generateEvent, 2000);
+    // Start generating events after 3 seconds
+    setTimeout(generateEvent, 3000);
+logWithTimestamp('Hunter: Simulation started - will generate liquidations every 10-30 seconds using real market prices');
   }
 }

@@ -13,6 +13,7 @@ import { getPriceService } from '../services/priceService';
 import { invalidateIncomeCache } from '../api/income';
 import { logWithTimestamp, logErrorWithTimestamp, logWarnWithTimestamp } from '../utils/timestamp';
 import { paperModeSimulator } from '../services/paperModeSimulator';
+import { getTrancheManager } from '../services/trancheManager';
 
 // Minimal local state - only track order IDs linked to positions
 interface PositionOrders {
@@ -910,6 +911,43 @@ logErrorWithTimestamp(`PositionManager: Failed to ensure protection for ${symbol
           if (sizeChanged) {
             this.refreshBalance();
           }
+
+          // Sync tranches with exchange position if tranche management is enabled
+          const symbolConfig = this.config.symbols[symbol];
+          if (symbolConfig?.enableTrancheManagement) {
+            try {
+              const trancheManager = getTrancheManager();
+              const trancheSide = positionAmt > 0 ? 'LONG' : 'SHORT';
+
+              // Create exchange position object for sync
+              const exchangePosition: ExchangePosition = {
+                symbol: pos.s,
+                positionAmt: pos.pa,
+                entryPrice: pos.ep,
+                markPrice: pos.mp || '0',
+                unRealizedProfit: pos.up,
+                liquidationPrice: pos.lp || '0',
+                leverage: this.symbolLeverage.get(symbol)?.toString() || '0',
+                marginType: pos.mt,
+                isolatedMargin: pos.iw || '0',
+                isAutoAddMargin: pos.iam || 'false',
+                positionSide: positionSide,
+                updateTime: event.E,
+              };
+
+              // Sync with exchange (3 separate arguments)
+              await trancheManager.syncWithExchange(
+                symbol,
+                trancheSide,
+                exchangePosition
+              );
+
+logWithTimestamp(`PositionManager: Synced tranches for ${symbol} ${trancheSide} with exchange`);
+            } catch (trancheError) {
+logWarnWithTimestamp('PositionManager: Failed to sync tranches with exchange:', trancheError);
+              // Don't fail the position update, just log the warning
+            }
+          }
         }
       });
 
@@ -1175,6 +1213,46 @@ logWarnWithTimestamp(`PositionManager: Could not find position key for order ${o
           }
         } else if (realizedPnl !== 0) {
 logWithTimestamp(`PositionManager: Using exchange-provided PnL for ${symbol} ${orderType}: $${realizedPnl.toFixed(2)}`);
+        }
+
+        // Close tranche if tranche management is enabled
+        const symbolConfig = this.config.symbols[symbol];
+        if (symbolConfig?.enableTrancheManagement) {
+          // Use async IIFE to handle await properly
+          (async () => {
+            try {
+              const trancheManager = getTrancheManager();
+
+              // Find position side from the position that was closed
+              let positionSideForTranche: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH';
+              for (const [key] of this.positionOrders.entries()) {
+                if (key.includes(symbol)) {
+                  const position = this.currentPositions.get(key);
+                  if (position) {
+                    positionSideForTranche = position.positionSide as any;
+                    break;
+                  }
+                }
+              }
+
+              // Process the order fill and close appropriate tranches
+              await trancheManager.processOrderFill({
+                symbol,
+                side, // The order side (BUY or SELL)
+                positionSide: positionSideForTranche,
+                quantityFilled: executedQty,
+                fillPrice: avgPrice,
+                realizedPnl,
+                orderId: orderId.toString(),
+              });
+
+              const trancheSide = side === 'BUY' ? 'SHORT' : 'LONG';
+logWithTimestamp(`PositionManager: Processed tranche close for ${symbol} ${trancheSide}, PnL: $${realizedPnl.toFixed(2)}`);
+            } catch (trancheError) {
+logErrorWithTimestamp('PositionManager: Failed to process tranche close:', trancheError);
+              // Don't fail the position close, just log the error
+            }
+          })();
         }
 
         // Broadcast order filled event (SL/TP)

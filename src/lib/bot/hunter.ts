@@ -10,6 +10,7 @@ import { liquidationStorage } from '../services/liquidationStorage';
 import { vwapService } from '../services/vwapService';
 import { vwapStreamer } from '../services/vwapStreamer';
 import { thresholdMonitor } from '../services/thresholdMonitor';
+import { getTrancheManager } from '../services/trancheManager';
 import { symbolPrecision } from '../utils/symbolPrecision';
 import {
   parseExchangeError,
@@ -754,6 +755,46 @@ logErrorWithTimestamp('Hunter: Analysis error:', error);
     let order: any; // Declare order variable for error handling
 
     try {
+      // Check tranche management limits (if enabled)
+      if (symbolConfig.enableTrancheManagement) {
+        try {
+          const trancheManager = getTrancheManager();
+          const trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
+
+          // Update P&L and check isolation conditions
+          const markPriceData = await getMarkPrice(symbol);
+          const price = parseFloat(Array.isArray(markPriceData) ? markPriceData[0].markPrice : markPriceData.markPrice);
+          await trancheManager.updateUnrealizedPnl(symbol, price);
+
+          // Check if we can open a new tranche
+          const canOpen = trancheManager.canOpenNewTranche(symbol, trancheSide);
+          if (!canOpen.allowed) {
+            logWithTimestamp(`Hunter: ${canOpen.reason}`);
+
+            // Broadcast to UI
+            if (this.statusBroadcaster) {
+              this.statusBroadcaster.broadcastTradingError(
+                `Tranche Limit Reached - ${symbol}`,
+                canOpen.reason || 'Cannot open new tranche',
+                {
+                  component: 'Hunter',
+                  symbol,
+                  details: {
+                    activeTranches: trancheManager.getTranches(symbol, trancheSide).length,
+                    maxTranches: symbolConfig.maxTranches || 3,
+                  }
+                }
+              );
+            }
+
+            return; // Block the trade
+          }
+        } catch (trancheError) {
+          // If TrancheManager is not initialized, log warning but continue
+          logWarnWithTimestamp('Hunter: TrancheManager check failed (not initialized?), continuing with trade:', trancheError);
+        }
+      }
+
       // Check position limits before placing trade
       if (this.positionTracker && !this.config.global.paperMode) {
         // Check if we already have a pending order for this symbol
@@ -1127,6 +1168,30 @@ logWarnWithTimestamp('Hunter: Cannot determine correct mode. Since we cannot ver
 
       // Only broadcast and emit if order was successfully placed
       if (order && order.orderId) {
+        // Create tranche if tranche management is enabled
+        if (symbolConfig.enableTrancheManagement) {
+          try {
+            const trancheManager = getTrancheManager();
+            const trancheSide = side === 'BUY' ? 'LONG' : 'SHORT';
+
+            const tranche = await trancheManager.createTranche({
+              symbol,
+              side,
+              positionSide: getPositionSide(this.isHedgeMode, side) as any,
+              entryPrice: orderType === 'LIMIT' ? orderPrice : entryPrice,
+              quantity: quantity!,
+              marginUsed: tradeSizeUSDT,
+              leverage: symbolConfig.leverage,
+              orderId: order.orderId.toString(),
+            });
+
+            logWithTimestamp(`Hunter: Created tranche ${tranche.id.substring(0, 8)} for ${symbol} ${side}`);
+          } catch (trancheError) {
+            logErrorWithTimestamp('Hunter: Failed to create tranche:', trancheError);
+            // Don't fail the trade, just log the error
+          }
+        }
+
         // Broadcast order placed event
         if (this.statusBroadcaster) {
           this.statusBroadcaster.broadcastOrderPlaced({

@@ -26,6 +26,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { TrancheSettingsSection } from './TrancheSettingsSection';
 
 interface SymbolConfigFormProps {
   onSave: (config: Config) => void;
@@ -808,7 +809,8 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                   </div>
 
                   {selectedSymbol && config.symbols[selectedSymbol] && (
-                    <Card>
+                    <>
+                      <Card>
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-lg">{selectedSymbol} Settings</CardTitle>
@@ -1384,17 +1386,25 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                         )}
                       </CardContent>
                     </Card>
-                  )}
-                </>
-              )}
 
-              {Object.keys(config.symbols).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Settings2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No symbols configured yet</p>
-                  <p className="text-sm">Add a symbol above to get started</p>
-                </div>
-              )}
+                    {/* Multi-Tranche Position Management */}
+                    <TrancheSettingsSection
+                      symbol={selectedSymbol}
+                      config={config.symbols[selectedSymbol]}
+                      onChange={(field, value) => handleSymbolChange(selectedSymbol, field, value)}
+                    />
+                  </>
+                )}
+              </>
+            )}
+
+            {Object.keys(config.symbols).length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Settings2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No symbols configured yet</p>
+                <p className="text-sm">Add a symbol above to get started</p>
+              </div>
+            )}
             </CardContent>
           </Card>
         </TabsContent>

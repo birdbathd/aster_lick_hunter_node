@@ -555,4 +555,115 @@ export class StatusBroadcaster extends EventEmitter {
       timestamp: new Date(),
     });
   }
+
+  // Tranche Management Broadcasting Methods
+
+  // Broadcast when a new tranche is created
+  broadcastTrancheCreated(data: {
+    trancheId: string;
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    entryPrice: number;
+    quantity: number;
+    marginUsed: number;
+    leverage: number;
+    tpPrice: number;
+    slPrice: number;
+  }): void {
+    this._broadcast('tranche_created', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
+
+  // Broadcast when a tranche is isolated (underwater >threshold%)
+  broadcastTrancheIsolated(data: {
+    trancheId: string;
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    entryPrice: number;
+    currentPrice: number;
+    unrealizedPnl: number;
+    pnlPercent: number;
+    isolationThreshold: number;
+  }): void {
+    this._broadcast('tranche_isolated', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
+
+  // Broadcast when a tranche is closed (fully or partially)
+  broadcastTrancheClosed(data: {
+    trancheId: string;
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    entryPrice: number;
+    exitPrice: number;
+    quantity: number;
+    realizedPnl: number;
+    closedFully: boolean;
+    orderId?: string;
+  }): void {
+    this._broadcast('tranche_closed', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
+
+  // Broadcast when tranches are synced with exchange position
+  broadcastTrancheSyncUpdate(data: {
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    totalTranches: number;
+    activeTranches: number;
+    isolatedTranches: number;
+    totalQuantity: number;
+    exchangeQuantity: number;
+    syncStatus: 'synced' | 'drift' | 'conflict';
+    quantityDrift?: number;
+  }): void {
+    this._broadcast('tranche_sync', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
+
+  // Broadcast real-time P&L updates for all tranches
+  broadcastTranchePnLUpdate(data: {
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    activeTranches: Array<{
+      trancheId: string;
+      entryPrice: number;
+      currentPrice: number;
+      quantity: number;
+      unrealizedPnl: number;
+      pnlPercent: number;
+      isolated: boolean;
+    }>;
+    totalUnrealizedPnl: number;
+    weightedAvgEntry: number;
+  }): void {
+    this._broadcast('tranche_pnl_update', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
+
+  // Broadcast when tranche limit is reached
+  broadcastTrancheLimitReached(data: {
+    symbol: string;
+    side: 'LONG' | 'SHORT';
+    activeTranches: number;
+    maxTranches: number;
+    isolatedTranches: number;
+    maxIsolatedTranches: number;
+    reason: string;
+  }): void {
+    this._broadcast('tranche_limit_reached', {
+      ...data,
+      timestamp: new Date(),
+    });
+  }
 }

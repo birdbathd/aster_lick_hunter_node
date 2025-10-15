@@ -15,6 +15,7 @@ import {
 import MinimalBotStatus from '@/components/MinimalBotStatus';
 import LiquidationSidebar from '@/components/LiquidationSidebar';
 import PositionTable from '@/components/PositionTable';
+import TradingViewChart from '@/components/TradingViewChart';
 import PnLChart from '@/components/PnLChart';
 import PerformanceCardInline from '@/components/PerformanceCardInline';
 import SessionPerformanceCard from '@/components/SessionPerformanceCard';
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [positions, setPositions] = useState<Position[]>([]);
   const [markPrices, setMarkPrices] = useState<Record<string, number>>({});
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('');
 
   // Initialize toast notifications
   useOrderNotifications();
@@ -157,6 +159,28 @@ export default function DashboardPage() {
       [symbol]: cfg.volumeThresholdUSDT
     }), {});
   }, [config?.symbols]);
+
+  // Set default symbol when config loads
+  useEffect(() => {
+    if (config?.symbols && Object.keys(config.symbols).length > 0 && !selectedSymbol) {
+      // First try to find a symbol with open positions
+      const positionSymbols = positions.map(pos => pos.symbol);
+      const symbolsWithPositions = Object.keys(config.symbols).filter(symbol => 
+        positionSymbols.includes(symbol)
+      );
+      
+      const defaultSymbol = symbolsWithPositions.length > 0 
+        ? symbolsWithPositions[0]  // Use symbol with position
+        : Object.keys(config.symbols)[0];  // Fallback to first configured symbol
+        
+      console.log(`[Dashboard] Setting default symbol: ${defaultSymbol}`, {
+        availableSymbols: Object.keys(config.symbols),
+        positionSymbols,
+        symbolsWithPositions
+      });
+      setSelectedSymbol(defaultSymbol);
+    }
+  }, [config?.symbols, selectedSymbol, positions]);
 
   // Calculate live account info with real-time mark prices
   // This supplements the official balance data with live price updates
@@ -394,6 +418,15 @@ export default function DashboardPage() {
           <PositionTable
             onClosePosition={handleClosePosition}
           />
+
+          {/* Trading Chart */}
+          {selectedSymbol && (
+            <TradingViewChart
+              symbol={selectedSymbol}
+              positions={positions}
+              className="mt-6"
+            />
+          )}
 
           {/* Recent Orders Table */}
           <RecentOrdersTable maxRows={100} />

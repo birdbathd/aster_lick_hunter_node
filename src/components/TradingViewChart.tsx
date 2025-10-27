@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import orderStore from '@/lib/services/orderStore';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -99,6 +100,8 @@ export default function TradingViewChart({ symbol, liquidations = [], positions 
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const positionLinesRef = useRef<any[]>([]);
+  const vwapLineRef = useRef<any>(null);
+  const orderMarkersRef = useRef<any[]>([]);
 
   // State
   const [timeframe, setTimeframe] = useState('5m');
@@ -109,6 +112,8 @@ export default function TradingViewChart({ symbol, liquidations = [], positions 
   const [showLiquidations, setShowLiquidations] = useState(true);
   const [liquidationGrouping, setLiquidationGrouping] = useState('5m');
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [showVWAP, setShowVWAP] = useState(false);
+  const [showRecentOrders, setShowRecentOrders] = useState(false);
 
   // Combine props liquidations with database liquidations
   const allLiquidations = useMemo(() => 
@@ -655,6 +660,191 @@ export default function TradingViewChart({ symbol, liquidations = [], positions 
     );
   }
 
+  // --- Recent orders overlay logic ---
+  // Use filled orders from orderStore (same as RecentOrdersTable)
+  const [filledOrders, setFilledOrders] = React.useState<any[]>([]);
+  useEffect(() => {
+    console.log('[TradingViewChart] Loading filled orders for symbol:', symbol);
+    
+    const loadOrders = async () => {
+      try {
+        // Fetch orders from API
+        await orderStore.fetchOrders();
+        
+        // Get only FILLED orders for the current symbol
+        const allFilled = orderStore.getFilteredOrders().filter((order: any) => order.status === 'FILLED' && order.symbol === symbol);
+        console.log('[TradingViewChart] Found filled orders:', allFilled);
+        setFilledOrders(allFilled);
+      } catch (err) {
+        console.error('[TradingViewChart] Failed to load orders:', err);
+      }
+    };
+    
+    loadOrders();
+    
+    // Listen for updates
+    const handleUpdate = () => {
+      const updated = orderStore.getFilteredOrders().filter((order: any) => order.status === 'FILLED' && order.symbol === symbol);
+      console.log('[TradingViewChart] Updated filled orders:', updated);
+      setFilledOrders(updated);
+    };
+    orderStore.on('orders:updated', handleUpdate);
+    orderStore.on('orders:filtered', handleUpdate);
+    return () => {
+      orderStore.off('orders:updated', handleUpdate);
+      orderStore.off('orders:filtered', handleUpdate);
+    };
+  }, [symbol]);
+
+  // Combine all overlays into one marker array
+  React.useEffect(() => {
+    console.log('[TradingViewChart] Overlay effect triggered:', {
+      showLiquidations,
+      showRecentOrders,
+      showVWAP,
+      hasSeriesRef: !!candlestickSeriesRef.current,
+      filledOrdersCount: filledOrders.length,
+      liquidationsCount: allLiquidations.length,
+      klineDataCount: klineData.length
+    });
+    if (!candlestickSeriesRef.current) return;
+    let markers: any[] = [];
+    // Add liquidation markers if enabled
+    if (showLiquidations && allLiquidations.length > 0) {
+      const groupedLiquidations = groupLiquidationsByTime(allLiquidations, liquidationGrouping);
+      const liqMarkers = groupedLiquidations.map(group => ({
+        time: Math.floor(group.timestamp / 1000) as Time,
+        position: 'belowBar',
+        color: getColorByVolume(group.totalVolume, group.side),
+        shape: 'circle',
+        size: getSizeByVolume(group.totalVolume),
+        text: `${group.count}${group.side === 1 ? 'L' : 'S'} $${(group.totalVolume/1000).toFixed(0)}K`,
+        id: `liq_${group.timestamp}_${group.side}`
+      }));
+      markers = markers.concat(liqMarkers);
+    }
+    // Add recent order markers if enabled
+    if (showRecentOrders) {
+      console.log('[TradingViewChart] Processing recent orders overlay - filledOrders:', filledOrders);
+      if (filledOrders.length === 0) {
+        console.warn('[TradingViewChart] No filled orders found for recent orders overlay', { symbol, filledOrders });
+      } else {
+        console.log(`[TradingViewChart] Show Recent Orders enabled, found ${filledOrders.length} filled orders`, filledOrders);
+      }
+      const orderMarkers = filledOrders.map((order: any) => {
+        const orderTime = Number(order.updateTime || order.time || order.transactTime);
+        let candle = klineData.find(k => typeof k.time === 'number' && Math.abs((k.time * 1000) - orderTime) < 60 * 1000);
+        if (!candle) {
+          // fallback: use closest candle
+          if (klineData.length > 0) {
+            candle = klineData.reduce((closest, k) => {
+              return Math.abs((k.time as number * 1000) - orderTime) < Math.abs((closest.time as number * 1000) - orderTime) ? k : closest;
+            }, klineData[0]);
+          }
+          if (!candle) {
+            console.warn('[TradingViewChart] No candle found for order', order, klineData);
+            return null;
+          }
+        }
+        const marker = {
+          time: candle.time,
+          position: 'aboveBar',
+          color: order.type?.includes('TAKE_PROFIT') ? '#4caf50' : order.type?.includes('STOP') ? '#f44336' : '#ffa726',
+          shape: 'arrowUp',
+          size: 2,
+          text: `${order.type}: ${order.price || order.stopPrice}`,
+          id: `order_${order.orderId}`,
+          type: 'order'
+        };
+        console.log('[TradingViewChart] Adding order marker:', marker);
+        return marker;
+      }).filter(Boolean);
+      markers = markers.concat(orderMarkers);
+      if (orderMarkers.length === 0) {
+        console.warn('[TradingViewChart] No order markers generated from filledOrders', filledOrders, klineData);
+      }
+    }
+    candlestickSeriesRef.current.setMarkers(markers);
+    if (showRecentOrders && markers.filter(m => m.type === 'order').length > 0) {
+      console.log('[TradingViewChart] Recent order markers drawn:', markers.filter(m => m.type === 'order'));
+    }
+    if (showVWAP) {
+      console.log('[TradingViewChart] VWAP overlay should be visible (line drawn separately)');
+    }
+    if (markers.length === 0) {
+      console.warn('[TradingViewChart] No markers drawn for overlays', { showLiquidations, showRecentOrders, filledOrders, allLiquidations, klineData });
+    }
+  }, [showLiquidations, allLiquidations, liquidationGrouping, showRecentOrders, filledOrders, klineData, showVWAP]);
+
+  // --- VWAP overlay logic ---
+  React.useEffect(() => {
+    console.log('[TradingViewChart] VWAP overlay effect triggered:', {
+      showVWAP,
+      symbol,
+      hasSeriesRef: !!candlestickSeriesRef.current,
+      hasVwapLine: !!vwapLineRef.current
+    });
+    if (!showVWAP) {
+      console.log('[TradingViewChart] Show VWAP disabled');
+      if (candlestickSeriesRef.current && vwapLineRef.current) {
+        candlestickSeriesRef.current.removePriceLine(vwapLineRef.current);
+        vwapLineRef.current = null;
+      }
+      return;
+    }
+    if (!candlestickSeriesRef.current || !symbol) {
+      console.warn('[TradingViewChart] Cannot show VWAP - missing series ref or symbol');
+      return;
+    }
+    // Fetch VWAP from streamer API (or fallback to service)
+    const fetchVWAP = async () => {
+      try {
+        console.log('[TradingViewChart] Fetching VWAP data for', symbol);
+        const configResp = await fetch('/api/config');
+        const configData = await configResp.json();
+        console.log('[TradingViewChart] Config data:', configData);
+        const symbolConfig = configData.symbols?.[symbol] || {};
+        console.log('[TradingViewChart] Symbol config:', symbolConfig);
+        const timeframe = symbolConfig.vwapTimeframe || '1m';
+        const lookback = symbolConfig.vwapLookback || 100;
+        const vwapResp = await fetch(`/api/vwap?symbol=${symbol}&timeframe=${timeframe}&lookback=${lookback}`);
+        const vwapData = await vwapResp.json();
+        console.log('[TradingViewChart] VWAP API response:', vwapData);
+        if (vwapData && vwapData.vwap) {
+          // Remove previous VWAP line if any
+          if (vwapLineRef.current) {
+            candlestickSeriesRef.current?.removePriceLine(vwapLineRef.current);
+            vwapLineRef.current = null;
+          }
+          // Add VWAP line
+          vwapLineRef.current = candlestickSeriesRef.current?.createPriceLine({
+            price: vwapData.vwap,
+            color: '#ffd600',
+            lineWidth: 2,
+            lineStyle: 0,
+            axisLabelVisible: true,
+            title: `VWAP (${timeframe})`
+          });
+          console.log('[TradingViewChart] VWAP line added:', vwapData.vwap);
+        } else {
+          console.warn('[TradingViewChart] No VWAP data returned for', symbol, timeframe, vwapData);
+        }
+      } catch (err) {
+        console.warn('[TradingViewChart] VWAP fetch error', err);
+      }
+    };
+    fetchVWAP();
+    // Optionally, poll for updates every 10s
+    const interval = setInterval(fetchVWAP, 10000);
+    return () => {
+      clearInterval(interval);
+      if (candlestickSeriesRef.current && vwapLineRef.current) {
+        candlestickSeriesRef.current.removePriceLine(vwapLineRef.current);
+        vwapLineRef.current = null;
+      }
+    };
+  }, [showVWAP, symbol]);
+
   return (
     <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -672,7 +862,29 @@ export default function TradingViewChart({ symbol, liquidations = [], positions 
               Show Liquidations
             </Label>
           </div>
-          
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="show-recent-orders"
+              checked={showRecentOrders}
+              onCheckedChange={(checked) => setShowRecentOrders(checked as boolean)}
+            />
+            <Label htmlFor="show-recent-orders" className="text-sm">
+              Show Recent Orders
+            </Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="show-vwap"
+              checked={showVWAP}
+              onCheckedChange={(checked) => setShowVWAP(checked as boolean)}
+            />
+            <Label htmlFor="show-vwap" className="text-sm">
+              Show VWAP
+            </Label>
+          </div>
+
           {showLiquidations && (
             <div className="flex items-center space-x-2">
               <Label className="text-sm text-muted-foreground">Group by:</Label>
@@ -690,7 +902,7 @@ export default function TradingViewChart({ symbol, liquidations = [], positions 
               </Select>
             </div>
           )}
-          
+
           <div className="flex items-center space-x-2">
             <Label className="text-sm text-muted-foreground">Timeframe:</Label>
             <Select value={timeframe} onValueChange={setTimeframe}>

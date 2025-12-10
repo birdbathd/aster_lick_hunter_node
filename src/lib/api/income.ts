@@ -2,6 +2,7 @@ import { buildSignedQuery } from './auth';
 import { ApiCredentials } from '../types';
 import { getRateLimitedAxios } from './requestInterceptor';
 import { getUserTrades } from './market';
+import { tradeHistoryCache } from '../services/tradeHistoryCache';
 
 const BASE_URL = 'https://fapi.asterdex.com';
 
@@ -728,9 +729,41 @@ export async function getRealizedPnLFromTrades(
   startTime: number,
   endTime: number
 ): Promise<Map<string, { date: string; realizedPnl: number; tradeCount: number }[]>> {
+  console.log(`[Trade PnL] Fetching trades for ${symbols.length} symbols (using cache for historical data)...`);
+
+  // Use the trade history cache - it handles caching historical data
+  // and only fetches fresh data for today and missing dates
+  try {
+    const result = await tradeHistoryCache.getRealizedPnLByDate(
+      credentials,
+      symbols,
+      startTime,
+      endTime
+    );
+
+    const stats = tradeHistoryCache.getStats();
+    console.log(`[Trade PnL] Cache stats: ${stats.totalDaysCached} days cached, ${stats.totalTradesCached} trades stored`);
+    console.log(`[Trade PnL] Aggregated ${result.size} days with trade data`);
+
+    return result;
+  } catch (error) {
+    console.error('[Trade PnL] Cache error, falling back to direct API:', error);
+    
+    // Fallback to direct API calls if cache fails
+    return getRealizedPnLFromTradesDirectly(credentials, symbols, startTime, endTime);
+  }
+}
+
+// Original implementation as fallback
+async function getRealizedPnLFromTradesDirectly(
+  credentials: ApiCredentials,
+  symbols: string[],
+  startTime: number,
+  endTime: number
+): Promise<Map<string, { date: string; realizedPnl: number; tradeCount: number }[]>> {
   const dailyPnLByDate = new Map<string, Map<string, { realizedPnl: number; tradeCount: number; tradeIds: Set<number> }>>();
 
-  console.log(`[Trade PnL] Fetching trades for ${symbols.length} symbols in 7-day chunks...`);
+  console.log(`[Trade PnL] Direct API: Fetching trades for ${symbols.length} symbols in 7-day chunks...`);
 
   // API limit: max 7 days per request
   const CHUNK_DAYS = 7;

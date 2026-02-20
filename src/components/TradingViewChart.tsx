@@ -129,6 +129,7 @@ export default function TradingViewChart({
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const positionLinesRef = useRef<any[]>([]);
   const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const fundingRateSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const orderMarkersRef = useRef<any[]>([]);
 
   // State
@@ -141,10 +142,13 @@ export default function TradingViewChart({
   const [liquidationGrouping, setLiquidationGrouping] = useState('5m');
   const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [showVWAP, setShowVWAP] = useState(false);
+  const [showFundingRate, setShowFundingRate] = useState(false);
+  const [fundingRateHover, setFundingRateHover] = useState<string | null>(null);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [showPositions, setShowPositions] = useState(true); // Show TP/SL lines
   const [trailingTPData, setTrailingTPData] = useState<Record<string, any>>({});
   const trailingTPLinesRef = useRef<any[]>([]);
+  const [chartReady, setChartReady] = useState(0);
   const [magnetMode, setMagnetMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30); // Default 30 seconds
@@ -329,14 +333,7 @@ export default function TradingViewChart({
     });
   }, [symbol, showPositions]);
 
-  // Debounced position updates
-  const debouncedUpdatePositions = useCallback(
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    debounce((positions: any[], orders: any[]) => {
-      updatePositionIndicators(positions, orders);
-    }, 250),
-    [updatePositionIndicators]
-  );
+
 
   // Load historical data when scrolling back in time
   const loadHistoricalData = useCallback(async () => {
@@ -691,6 +688,7 @@ export default function TradingViewChart({
 
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
+      setChartReady(prev => prev + 1);
 
       // Track user interactions (scrolling, zooming)
       const handleVisibleLogicalRangeChange = debounce((newRange: any) => {
@@ -719,6 +717,7 @@ export default function TradingViewChart({
         chartRef.current.remove();
         chartRef.current = null;
         candlestickSeriesRef.current = null;
+        setChartReady(0);
       }
     };
   }, [loading, error, isVisible, chartHeight]); // Re-initialize when loading/error/visibility states change
@@ -799,8 +798,9 @@ export default function TradingViewChart({
 
   // Update position indicators when positions change or toggle changes
   useEffect(() => {
+    if (!candlestickSeriesRef.current || !chartReady) return;
     if (showPositions && positions.length > 0) {
-      debouncedUpdatePositions(positions, openOrders);
+      updatePositionIndicators(positions, openOrders);
     } else if (!showPositions) {
       // Clear lines when toggle is off
       positionLinesRef.current.forEach(line => {
@@ -817,7 +817,7 @@ export default function TradingViewChart({
       });
       trailingTPLinesRef.current = [];
     }
-  }, [positions, openOrders, showPositions, debouncedUpdatePositions]);
+  }, [positions, openOrders, showPositions, updatePositionIndicators, chartReady]);
 
   // Listen for trailing TP state from WebSocket
   useEffect(() => {
@@ -1205,6 +1205,131 @@ export default function TradingViewChart({
     };
   }, [showVWAP, symbol, config, timeframe]);
 
+  // --- Funding Rate overlay logic ---
+  React.useEffect(() => {
+    if (!showFundingRate) {
+      if (fundingRateSeriesRef.current && chartRef.current) {
+        chartRef.current.removeSeries(fundingRateSeriesRef.current);
+        fundingRateSeriesRef.current = null;
+      }
+      return;
+    }
+    if (!chartRef.current || !symbol) {
+      return;
+    }
+
+    // Map chart timeframe to appropriate hours of history
+    const hoursMap: Record<string, number> = {
+      '1m': 24, '3m': 48, '5m': 72, '15m': 168,
+      '30m': 336, '1h': 720, '4h': 720, '1d': 720,
+    };
+    const hours = hoursMap[timeframe] || 168;
+
+    const fetchFundingRates = async () => {
+      try {
+        const resp = await fetch(`/api/funding-rates?symbol=${symbol}&hours=${hours}`);
+        const result = await resp.json();
+
+        if (result?.data && result.data.length > 0) {
+          // Remove previous funding rate series if any
+          if (fundingRateSeriesRef.current && chartRef.current) {
+            chartRef.current.removeSeries(fundingRateSeriesRef.current);
+            fundingRateSeriesRef.current = null;
+          }
+
+          // Create funding rate line series on a SEPARATE price scale (right side)
+          fundingRateSeriesRef.current = chartRef.current.addLineSeries({
+            color: '#06b6d4', // cyan-500
+            lineWidth: 2,
+            lineStyle: 2, // Dashed
+            title: 'Funding Rate',
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: true,
+            crosshairMarkerBackgroundColor: '#06b6d4',
+            priceScaleId: 'funding-rate', // Separate scale
+            priceFormat: {
+              type: 'custom',
+              formatter: (price: number) => price.toFixed(4) + '%',
+            },
+          });
+
+          // Configure the separate price scale
+          chartRef.current.priceScale('funding-rate').applyOptions({
+            scaleMargins: { top: 0.75, bottom: 0 }, // Bottom 25% of chart
+            borderVisible: false,
+            alignLabels: true,
+            visible: true,
+          });
+
+          // Format and align data to chart timeframe to prevent candle stretching
+          // Funding rates are every ~15 min; we must bucket to chart candle intervals
+          const tfToSeconds: Record<string, number> = {
+            '1m': 60, '3m': 180, '5m': 300, '15m': 900,
+            '30m': 1800, '1h': 3600, '4h': 14400, '1d': 86400,
+          };
+          const bucketSize = tfToSeconds[timeframe] || 300;
+
+          // Bucket FR data: for each candle period, keep the last FR value
+          const bucketMap = new Map<number, number>();
+          for (const d of result.data) {
+            const bucketTime = Math.floor(d.time / bucketSize) * bucketSize;
+            bucketMap.set(bucketTime, d.value as number);
+          }
+
+          const lineData = Array.from(bucketMap.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([time, value]) => ({ time, value }));
+
+          fundingRateSeriesRef.current.setData(lineData);
+        }
+      } catch (err) {
+        console.warn('[TradingViewChart] Funding rate fetch error', err);
+      }
+    };
+
+    fetchFundingRates();
+
+    // Subscribe to crosshair move to show funding rate value on hover
+    const handleCrosshairMove = (param: any) => {
+      if (!param || !param.time || !fundingRateSeriesRef.current) {
+        setFundingRateHover(null);
+        return;
+      }
+      const value = param.seriesData?.get(fundingRateSeriesRef.current);
+      if (value && typeof value.value === 'number') {
+        setFundingRateHover(value.value.toFixed(4) + '%');
+      } else {
+        setFundingRateHover(null);
+      }
+    };
+
+    chartRef.current.subscribeCrosshairMove(handleCrosshairMove);
+
+    // Poll every 60 seconds (funding rates update every 15 min)
+    const interval = setInterval(fetchFundingRates, 60000);
+
+    return () => {
+      clearInterval(interval);
+      try {
+        if (chartRef.current) {
+          chartRef.current.unsubscribeCrosshairMove(handleCrosshairMove);
+        }
+      } catch { /* ignore */ }
+      if (fundingRateSeriesRef.current) {
+        try {
+          if (chartRef.current) {
+            chartRef.current.removeSeries(fundingRateSeriesRef.current);
+          }
+        } catch (err) {
+          // Chart may have been removed already, ignore
+        }
+        fundingRateSeriesRef.current = null;
+      }
+      setFundingRateHover(null);
+    };
+  }, [showFundingRate, symbol, timeframe]);
+
   // Manual refresh handler
   const handleRefresh = useCallback(() => {
     console.log('[TradingViewChart] Manual refresh triggered');
@@ -1322,7 +1447,7 @@ export default function TradingViewChart({
               </div>
 
               {/* Overlays */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 w-full">
                 <div className="flex items-center gap-2 bg-muted/30 rounded-md px-2.5 py-1.5">
                   <div className="flex items-center gap-2">
                     <Checkbox
@@ -1361,6 +1486,20 @@ export default function TradingViewChart({
                     />
                     <Label htmlFor="show-vwap" className="text-sm cursor-pointer font-medium">
                       VWAP
+                    </Label>
+                  </div>
+
+                  <div className="h-4 w-px bg-border" />
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="show-funding-rate"
+                      checked={showFundingRate}
+                      onCheckedChange={(checked) => setShowFundingRate(checked as boolean)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="show-funding-rate" className="text-sm cursor-pointer font-medium">
+                      FR
                     </Label>
                   </div>
                 </div>
@@ -1406,7 +1545,7 @@ export default function TradingViewChart({
             </div>
 
             {/* Desktop: Full width with justified layout */}
-            <div className="hidden sm:flex items-center justify-between gap-4">
+            <div className="hidden sm:flex items-center justify-between gap-4 flex-wrap">
               {/* Left side: Refresh, Auto-refresh, Timeframe */}
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground">Refresh:</span>
@@ -1522,6 +1661,20 @@ export default function TradingViewChart({
                       VWAP
                     </Label>
                   </div>
+
+                  <div className="h-4 w-px bg-border" />
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="show-funding-rate-desktop"
+                      checked={showFundingRate}
+                      onCheckedChange={(checked) => setShowFundingRate(checked as boolean)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="show-funding-rate-desktop" className="text-sm cursor-pointer font-medium">
+                      FR
+                    </Label>
+                  </div>
                 </div>
 
                 <div className="h-4 w-px bg-border" />
@@ -1589,6 +1742,11 @@ export default function TradingViewChart({
               <div className="absolute top-2 left-2 z-10 bg-background/90 border border-border rounded-md px-3 py-1.5 flex items-center gap-2 shadow-sm">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span className="text-xs text-muted-foreground">Loading history...</span>
+              </div>
+            )}
+            {showFundingRate && fundingRateHover && (
+              <div className="absolute top-2 right-2 z-10 bg-cyan-950/90 border border-cyan-700/50 rounded-md px-2.5 py-1 shadow-sm">
+                <span className="text-xs font-mono text-cyan-400">FR: {fundingRateHover}</span>
               </div>
             )}
             <div 

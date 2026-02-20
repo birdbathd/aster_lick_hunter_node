@@ -54,6 +54,14 @@ interface TrailingTPData {
   callbackPercent: number;
 }
 
+interface FundingRateInfo {
+  rate: number;
+  ratePercent: string;
+  direction: 'longs_pay' | 'shorts_pay' | 'neutral';
+  markPrice: number;
+  age: string;
+}
+
 interface PositionTableProps {
   positions?: Position[];
   onClosePosition?: (symbol: string, side: 'LONG' | 'SHORT') => void;
@@ -71,6 +79,7 @@ export default function PositionTable({
   const [vwapData, setVwapData] = useState<Record<string, VWAPData>>({});
   const [protectionStatus, setProtectionStatus] = useState<Record<string, boolean>>({});
   const [trailingTPData, setTrailingTPData] = useState<Record<string, TrailingTPData>>({});
+  const [fundingRates, setFundingRates] = useState<Record<string, FundingRateInfo>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [closePositionModal, setClosePositionModal] = useState<{
     isOpen: boolean;
@@ -243,6 +252,11 @@ export default function PositionTable({
           // Update trailing TP state for all positions
           if (message.data?.positions) {
             setTrailingTPData(message.data.positions);
+          }
+        } else if (message.type === 'funding_rates') {
+          // Update funding rate data for all symbols
+          if (message.data) {
+            setFundingRates(message.data);
           }
         }
       };
@@ -698,6 +712,11 @@ export default function PositionTable({
                 const hasVwapProtection = symbolConfig?.vwapProtection;
                 const isProtected = protectionStatus[`${position.symbol}_${position.side}`];
                 const mobileTrailingTP = trailingTPData[`${position.symbol}_${position.side}`];
+                const mobileFundingRate = fundingRates[position.symbol];
+                const isMobileFundingAdverse = mobileFundingRate && (
+                  (position.side === 'LONG' && mobileFundingRate.direction === 'longs_pay') ||
+                  (position.side === 'SHORT' && mobileFundingRate.direction === 'shorts_pay')
+                );
 
                 return (
                   <div key={key} className="border rounded-lg p-3 space-y-2">
@@ -805,6 +824,14 @@ export default function PositionTable({
                             : `Trail: +${mobileTrailingTP.activationPercent}%`}
                         </Badge>
                       )}
+                      {mobileFundingRate && (
+                        <span className={`text-[10px] font-mono ${
+                          isMobileFundingAdverse ? 'text-orange-400' : 'text-emerald-400'
+                        }`}>
+                          FR:{mobileFundingRate.ratePercent}
+                        </span>
+                      )}
+
                     </div>
 
                     {/* Actions */}
@@ -898,6 +925,11 @@ export default function PositionTable({
               const symbolConfig = config?.symbols?.[position.symbol];
               const hasVwapProtection = symbolConfig?.vwapProtection;
               const trailingTP = trailingTPData[`${position.symbol}_${position.side}`];
+              const fundingRate = fundingRates[position.symbol];
+              const isFundingAdverse = fundingRate && (
+                (position.side === 'LONG' && fundingRate.direction === 'longs_pay') ||
+                (position.side === 'SHORT' && fundingRate.direction === 'shorts_pay')
+              );
 
               return (
                 <TableRow key={key} className="h-12">
@@ -1109,6 +1141,16 @@ export default function PositionTable({
                                     </p>
                                   </>
                                 )}
+                                {fundingRate && (
+                                  <>
+                                    <p className={`font-medium ${isFundingAdverse ? 'text-orange-400' : 'text-emerald-400'}`}>
+                                      Funding: {fundingRate.ratePercent} ({fundingRate.direction === 'longs_pay' ? 'Longs Pay' : fundingRate.direction === 'shorts_pay' ? 'Shorts Pay' : 'Neutral'})
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      {isFundingAdverse ? '⚠️ You\'re paying funding' : '✅ You\'re receiving funding'}
+                                    </p>
+                                  </>
+                                )}
                               </div>
                             </TooltipContent>
                           </Tooltip>
@@ -1124,6 +1166,11 @@ export default function PositionTable({
                           {trailingTP.activated
                             ? `Trail: $${formatPrice(position.symbol, trailingTP.trailStopPrice)}`
                             : `Trail: +${trailingTP.activationPercent}%`}
+                        </div>
+                      )}
+                      {fundingRate && (
+                        <div className={`text-[9px] font-mono ${isFundingAdverse ? 'text-orange-400' : 'text-emerald-400'}`}>
+                          FR:{fundingRate.ratePercent}
                         </div>
                       )}
                     </div>

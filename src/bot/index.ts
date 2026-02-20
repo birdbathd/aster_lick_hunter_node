@@ -806,6 +806,17 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
       try {
         this.fundingRateCollector = new FundingRateCollector(this.config);
         await this.fundingRateCollector.start();
+
+        // Broadcast funding rates to web UI every 30 seconds
+        setInterval(() => {
+          if (this.fundingRateCollector) {
+            const summary = this.fundingRateCollector.getSummary();
+            if (Object.keys(summary).length > 0) {
+              this.statusBroadcaster.broadcast('funding_rates', summary);
+            }
+          }
+        }, 30000);
+
         logWithTimestamp('✅ Funding Rate Collector started (polling every 15 minutes, backfilling 30 days history)');
       } catch (error: any) {
         logErrorWithTimestamp('⚠️  Funding Rate Collector failed to start:', error.message);

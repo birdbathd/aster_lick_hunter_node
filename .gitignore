@@ -63,3 +63,6 @@ scripts/aster-notifier.cjs
 *.swp
 .*.swp
 core
+
+# Chat exports
+ChatExport*/

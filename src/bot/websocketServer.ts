@@ -419,6 +419,24 @@ export class StatusBroadcaster extends EventEmitter {
     });
   }
 
+  // Broadcast trailing TP state to web UI for live position display
+  broadcastTrailingTPState(data: Record<string, {
+    symbol: string;
+    side: string;
+    entryPrice: number;
+    activated: boolean;
+    highWatermark: number;
+    trailStopPrice: number;
+    profitPercent: number;
+    activationPercent: number;
+    callbackPercent: number;
+  }>): void {
+    this._broadcast('trailing_tp_state', {
+      positions: data,
+      timestamp: new Date(),
+    });
+  }
+
   // Broadcast when a position is closed
   broadcastPositionClosed(data: {
     symbol: string;

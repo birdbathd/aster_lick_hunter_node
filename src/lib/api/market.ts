@@ -212,3 +212,28 @@ export async function getUserTrades(
   });
   return response.data;
 }
+
+// Get current funding rate for a symbol (from premiumIndex)
+export async function getFundingRate(symbol: string): Promise<{ symbol: string; lastFundingRate: string; nextFundingTime: number }> {
+  const params = { symbol };
+  const query = paramsToQuery(params);
+  const axios = getRateLimitedAxios();
+  const response: AxiosResponse = await axios.get(`${BASE_URL}/fapi/v1/premiumIndex?${query}`);
+  return response.data;
+}
+
+// Get all funding rates at once (no symbol param)
+export async function getAllFundingRates(): Promise<Array<{ symbol: string; lastFundingRate: string; nextFundingTime: number; markPrice: string }>> {
+  const axios = getRateLimitedAxios();
+  const response: AxiosResponse = await axios.get(`${BASE_URL}/fapi/v1/premiumIndex`);
+  return response.data;
+}
+
+// Get historical funding rate data
+export async function getFundingRateHistory(symbol: string, params: { startTime?: number; endTime?: number; limit?: number } = {}): Promise<Array<{ symbol: string; fundingRate: string; fundingTime: number }>> {
+  const queryParams: any = { symbol, ...params };
+  const query = paramsToQuery(queryParams);
+  const axios = getRateLimitedAxios();
+  const response: AxiosResponse = await axios.get(`${BASE_URL}/fapi/v1/fundingRate?${query}`);
+  return response.data;
+}

@@ -35,6 +35,7 @@ export class Hunter extends EventEmitter {
   private statusBroadcaster: any; // Will be injected
   private isHedgeMode: boolean;
   private positionTracker: PositionTracker | null = null;
+  private fundingRateCollector: any; // Will be injected
   private pendingOrders: Map<string, { symbol: string, side: 'BUY' | 'SELL', timestamp: number }> = new Map(); // Track orders placed but not yet filled
   private lastTradeTimestamps: Map<string, { long: number; short: number }> = new Map(); // Track last trade per symbol/side
   private cleanupInterval: NodeJS.Timeout | null = null; // Periodic cleanup timer
@@ -93,6 +94,11 @@ export class Hunter extends EventEmitter {
         this.removePendingOrder(data.orderId?.toString());
       });
     }
+  }
+
+  // Set funding rate collector for snapshots at trade entry
+  public setFundingRateCollector(collector: any): void {
+    this.fundingRateCollector = collector;
   }
 
   // Update configuration dynamically
@@ -1056,6 +1062,9 @@ logErrorWithTimestamp('Hunter: Analysis error:', error);
     }
 
     try {
+      // Determine if we're adding to an existing position (hoisted for use in post-order logic)
+      let isAddingToExisting = false;
+
       // Check position limits before placing trade
       if (this.positionTracker && !this.config.global.paperMode) {
         // Check if we already have a pending order for this symbol
@@ -1072,7 +1081,7 @@ logWithTimestamp(`Hunter: Skipping trade - already have pending order for ${symb
         const totalPositions = currentPositionCount + pendingOrderCount;
         
         // Check if this would be adding to an existing position (same symbol, same direction)
-        const isAddingToExisting = this.positionTracker.hasPositionInDirection(symbol, side, this.isHedgeMode);
+        isAddingToExisting = this.positionTracker.hasPositionInDirection(symbol, side, this.isHedgeMode);
 
         if (totalPositions >= maxPositions && !isAddingToExisting) {
 logWithTimestamp(`Hunter: Skipping trade - max positions reached (current: ${currentPositionCount}, pending: ${pendingOrderCount}, max: ${maxPositions})`);
@@ -1725,6 +1734,19 @@ logWarnWithTimestamp('Hunter: Cannot determine correct mode. Since we cannot ver
           paperMode: false,
           qualityScore
         });
+
+        // Snapshot funding rate at trade entry (for correlation analysis)
+        if (this.fundingRateCollector && order.orderId) {
+          try {
+            const fundingRate = await this.fundingRateCollector.snapshotAtEntry(symbol, order.orderId);
+            if (fundingRate) {
+              logWithTimestamp(`Hunter: Funding rate snapshot for ${symbol}: ${fundingRate}`);
+            }
+          } catch (frError: any) {
+            logWarnWithTimestamp(`Hunter: Failed to snapshot funding rate for ${symbol}:`, frError?.message);
+            // Non-blocking - funding rate snapshot failure shouldn't affect trading
+          }
+        }
       }
 
     } catch (error: any) {

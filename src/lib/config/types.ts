@@ -36,6 +36,11 @@ export const symbolConfigSchema = z.object({
 
   // Threshold system settings
   useThreshold: z.boolean().optional(),
+
+  // Trailing Take Profit (per-symbol overrides)
+  enableTrailingTP: z.boolean().optional(),
+  trailingTPActivation: z.number().min(0.05).max(20).optional(),
+  trailingTPCallback: z.number().min(0.01).max(10).optional(),
 }).refine(data => {
   // Ensure we have either legacy or new volume thresholds
   return data.volumeThresholdUSDT !== undefined ||

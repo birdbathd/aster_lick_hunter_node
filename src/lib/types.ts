@@ -48,6 +48,11 @@ export interface SymbolConfig {
   trancheRecoveryThreshold?: number;     // P&L % threshold to auto-close recovered tranches (e.g., 0.5 for +0.5%)
   maxPositionLossUSDT?: number;          // Position-level max loss in USDT — close worst tranches when total unrealized exceeds this (e.g., 3)
   maxTrancheAgeMinutes?: number;         // Time-based exit: close underwater tranches older than this (e.g., 240 for 4 hours)
+
+  // Per-symbol Trailing Take Profit (overrides global settings when set)
+  enableTrailingTP?: boolean;             // Enable trailing TP for this symbol (default: use global setting)
+  trailingTPActivation?: number;          // Profit % at which trailing TP activates for this symbol (default: use global)
+  trailingTPCallback?: number;            // Callback % from peak profit to trigger close for this symbol (default: use global)
 }
 
 export interface ApiCredentials {

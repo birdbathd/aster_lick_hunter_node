@@ -135,7 +135,30 @@ class TradeHistoryDb {
         value TEXT,
         updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
       );
+
+      -- Funding rate snapshots for correlation analysis
+      CREATE TABLE IF NOT EXISTS funding_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        funding_rate TEXT NOT NULL,
+        mark_price TEXT,
+        next_funding_time INTEGER,
+        snapshot_time INTEGER NOT NULL,
+        source TEXT DEFAULT 'poll',
+        UNIQUE(symbol, snapshot_time)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_funding_symbol ON funding_rates(symbol);
+      CREATE INDEX IF NOT EXISTS idx_funding_time ON funding_rates(snapshot_time);
+      CREATE INDEX IF NOT EXISTS idx_funding_symbol_time ON funding_rates(symbol, snapshot_time);
     `);
+
+    // Add funding_rate_at_entry column to trade_history if it doesn't exist
+    try {
+      this.db.exec(`ALTER TABLE trade_history ADD COLUMN funding_rate_at_entry TEXT`);
+    } catch (_) {
+      // Column already exists — ignore
+    }
   }
 
   /**
@@ -537,6 +560,109 @@ class TradeHistoryDb {
    */
   close(): void {
     this.db.close();
+  }
+
+  // ---- Funding Rate Methods ----
+
+  /**
+   * Insert a funding rate snapshot
+   */
+  insertFundingRate(record: { symbol: string; fundingRate: string; markPrice?: string; nextFundingTime?: number; snapshotTime: number; source?: string }): void {
+    this.db.prepare(`
+      INSERT OR IGNORE INTO funding_rates (symbol, funding_rate, mark_price, next_funding_time, snapshot_time, source)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(record.symbol, record.fundingRate, record.markPrice || null, record.nextFundingTime || null, record.snapshotTime, record.source || 'poll');
+  }
+
+  /**
+   * Batch insert funding rate snapshots
+   */
+  batchInsertFundingRates(records: Array<{ symbol: string; fundingRate: string; markPrice?: string; nextFundingTime?: number; snapshotTime: number; source?: string }>): void {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO funding_rates (symbol, funding_rate, mark_price, next_funding_time, snapshot_time, source)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const transaction = this.db.transaction((recs: typeof records) => {
+      for (const r of recs) {
+        stmt.run(r.symbol, r.fundingRate, r.markPrice || null, r.nextFundingTime || null, r.snapshotTime, r.source || 'poll');
+      }
+    });
+    transaction(records);
+  }
+
+  /**
+   * Get funding rates for a symbol within a time range
+   */
+  getFundingRates(symbol: string, startTime?: number, endTime?: number, limit?: number): Array<{ symbol: string; funding_rate: string; mark_price: string; snapshot_time: number; source: string }> {
+    let sql = 'SELECT symbol, funding_rate, mark_price, snapshot_time, source FROM funding_rates WHERE symbol = ?';
+    const params: any[] = [symbol];
+    if (startTime) { sql += ' AND snapshot_time >= ?'; params.push(startTime); }
+    if (endTime) { sql += ' AND snapshot_time <= ?'; params.push(endTime); }
+    sql += ' ORDER BY snapshot_time DESC';
+    if (limit) { sql += ' LIMIT ?'; params.push(limit); }
+    return this.db.prepare(sql).all(...params) as any[];
+  }
+
+  /**
+   * Get the latest funding rate for a symbol
+   */
+  getLatestFundingRate(symbol: string): { symbol: string; funding_rate: string; mark_price: string; snapshot_time: number } | undefined {
+    return this.db.prepare(`
+      SELECT symbol, funding_rate, mark_price, snapshot_time
+      FROM funding_rates WHERE symbol = ?
+      ORDER BY snapshot_time DESC LIMIT 1
+    `).get(symbol) as any;
+  }
+
+  /**
+   * Get latest funding rates for all symbols
+   */
+  getLatestFundingRates(): Array<{ symbol: string; funding_rate: string; mark_price: string; snapshot_time: number }> {
+    return this.db.prepare(`
+      SELECT f.symbol, f.funding_rate, f.mark_price, f.snapshot_time
+      FROM funding_rates f
+      INNER JOIN (
+        SELECT symbol, MAX(snapshot_time) as max_time
+        FROM funding_rates GROUP BY symbol
+      ) latest ON f.symbol = latest.symbol AND f.snapshot_time = latest.max_time
+      ORDER BY CAST(f.funding_rate AS REAL) ASC
+    `).all() as any[];
+  }
+
+  /**
+   * Update funding_rate_at_entry on a trade record
+   */
+  updateTradeFundingRate(symbol: string, orderId: number, fundingRate: string): void {
+    this.db.prepare(`
+      UPDATE trade_history SET funding_rate_at_entry = ?
+      WHERE symbol = ? AND order_id = ? AND funding_rate_at_entry IS NULL
+    `).run(fundingRate, symbol, orderId);
+  }
+
+  /**
+   * Get funding rate stats for correlation analysis
+   */
+  getFundingRateStats(symbol: string, lookbackHours: number = 24): { avg: number; min: number; max: number; current: number; count: number } | null {
+    const since = Date.now() - (lookbackHours * 60 * 60 * 1000);
+    const result = this.db.prepare(`
+      SELECT 
+        AVG(CAST(funding_rate AS REAL)) as avg_rate,
+        MIN(CAST(funding_rate AS REAL)) as min_rate,
+        MAX(CAST(funding_rate AS REAL)) as max_rate,
+        COUNT(*) as count
+      FROM funding_rates WHERE symbol = ? AND snapshot_time >= ?
+    `).get(symbol, since) as any;
+
+    if (!result || result.count === 0) return null;
+
+    const latest = this.getLatestFundingRate(symbol);
+    return {
+      avg: result.avg_rate,
+      min: result.min_rate,
+      max: result.max_rate,
+      current: latest ? parseFloat(latest.funding_rate) : 0,
+      count: result.count,
+    };
   }
 }
 

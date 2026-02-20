@@ -2367,6 +2367,79 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                           </p>
                         </div>
 
+                        {/* Per-Symbol Trailing Take Profit */}
+                        <div className="col-span-2">
+                          <Separator className="my-4" />
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-0.5">
+                                <Label className="flex items-center gap-2">
+                                  <Crosshair className="h-4 w-4 text-purple-500" />
+                                  Trailing Take Profit
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Trail profit from peak instead of fixed TP — overrides global setting for this symbol
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {config.symbols[selectedSymbol].enableTrailingTP === undefined && config.global.enableTrailingTP && (
+                                  <Badge variant="outline" className="text-[10px] border-purple-400 text-purple-400">Global</Badge>
+                                )}
+                                <Switch
+                                  checked={config.symbols[selectedSymbol].enableTrailingTP ?? config.global.enableTrailingTP ?? false}
+                                  onCheckedChange={(checked) =>
+                                    handleSymbolChange(selectedSymbol, 'enableTrailingTP', checked)
+                                  }
+                                />
+                              </div>
+                            </div>
+                            {(config.symbols[selectedSymbol].enableTrailingTP ?? config.global.enableTrailingTP) && (
+                              <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-purple-400/30">
+                                <div className="space-y-2">
+                                  <Label>Activation %</Label>
+                                  <div className="flex items-center space-x-2">
+                                    <NumberInput
+                                      value={config.symbols[selectedSymbol].trailingTPActivation ?? ''}
+                                      onChange={(value) => handleSymbolChange(selectedSymbol, 'trailingTPActivation', value)}
+                                      defaultValue={config.global.trailingTPActivation ?? 0.5}
+                                      className="w-24"
+                                      min="0.05"
+                                      max="20"
+                                      step="0.1"
+                                    />
+                                    <span className="text-xs text-muted-foreground">
+                                      Profit % to start trailing
+                                      {!config.symbols[selectedSymbol].trailingTPActivation && (
+                                        <span className="text-purple-400"> (global: {config.global.trailingTPActivation ?? 0.5}%)</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Callback %</Label>
+                                  <div className="flex items-center space-x-2">
+                                    <NumberInput
+                                      value={config.symbols[selectedSymbol].trailingTPCallback ?? ''}
+                                      onChange={(value) => handleSymbolChange(selectedSymbol, 'trailingTPCallback', value)}
+                                      defaultValue={config.global.trailingTPCallback ?? 0.3}
+                                      className="w-24"
+                                      min="0.01"
+                                      max="10"
+                                      step="0.05"
+                                    />
+                                    <span className="text-xs text-muted-foreground">
+                                      Drop from peak to close
+                                      {!config.symbols[selectedSymbol].trailingTPCallback && (
+                                        <span className="text-purple-400"> (global: {config.global.trailingTPCallback ?? 0.3}%)</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Order Type Settings */}
                         <div className="col-span-2">
                           <Separator className="my-4" />

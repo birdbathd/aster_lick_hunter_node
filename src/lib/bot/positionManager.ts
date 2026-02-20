@@ -91,8 +91,18 @@ export class PositionManager extends EventEmitter implements PositionTracker {
   private orderCancellationLocks: Set<string> = new Set(); // Prevent concurrent order cancellation for same symbol
   private symbolLeverage: Map<string, number> = new Map(); // Track leverage per symbol from ACCOUNT_CONFIG_UPDATE
   
-  // Trailing TP state: key -> { entryPrice, highWatermark, activated }
-  private trailingTPState: Map<string, { entryPrice: number; highWatermark: number; activated: boolean; symbol: string; isLong: boolean; quantity: number; positionSide: string }> = new Map();
+  // Trailing TP state: key -> { entryPrice, highWatermark, activated, per-symbol config }
+  private trailingTPState: Map<string, {
+    entryPrice: number;
+    highWatermark: number;
+    activated: boolean;
+    symbol: string;
+    isLong: boolean;
+    quantity: number;
+    positionSide: string;
+    activationPercent: number;
+    callbackPercent: number;
+  }> = new Map();
   
   // DCA entry counter: "SYMBOL_DIRECTION" -> count of DCA entries this session
   private dcaEntryCounts: Map<string, number> = new Map();
@@ -142,6 +152,9 @@ logWithTimestamp(`PositionManager: ${symbol} SL percent changed from ${oldSym.sl
 logWithTimestamp(`PositionManager: Note: Existing SL/TP orders for ${symbol} remain unchanged`);
       }
     }
+
+    // Check if trailing TP config changed — register/unregister existing positions
+    this.handleTrailingTPConfigChange(oldConfig, newConfig);
 
     // If paper mode changed and we have an active websocket, we may need to restart
     if (oldConfig.global.paperMode !== newConfig.global.paperMode) {
@@ -252,9 +265,12 @@ logWithTimestamp('PositionManager WS connected');
       this.orderCheckInterval = setInterval(() => this.checkAndAdjustOrders(), 30 * 1000);
 
       // Trailing TP monitor every 5 seconds (needs fast response)
-      if (this.config.global.enableTrailingTP) {
+      // Always start interval — per-symbol enableTrailingTP is checked inside
+      if (this.isTrailingTPEnabledForAny()) {
         this.trailingTPInterval = setInterval(() => this.checkTrailingTakeProfits(), 5 * 1000);
-logWithTimestamp(`PositionManager: Trailing TP monitoring started (activation: ${this.config.global.trailingTPActivation ?? 0.5}%, callback: ${this.config.global.trailingTPCallback ?? 0.3}%)`);
+logWithTimestamp(`PositionManager: Trailing TP monitoring started (per-symbol or global config)`);
+        // Register existing positions for trailing TP on startup
+        this.registerExistingPositionsForTrailingTP();
       }
 
       // Clean up orphaned orders immediately on startup, then every 30 seconds
@@ -511,21 +527,42 @@ logWithTimestamp(`PositionManager: Found TP order ${tpOrder.orderId} for ${key} 
 logWithTimestamp(`PositionManager: Adjusting protective orders for ${key} due to quantity mismatch`);
             await this.adjustProtectiveOrders(position, slOrder, tpOrder);
           } else if (!slOrder || !tpOrder) {
-            // Critical protection check - log with appropriate severity
-            if (!slOrder && !tpOrder) {
+            // Check if trailing TP is managing this position's exit (skip TP re-placement)
+            const trailingConfig = this.getTrailingTPConfig(position.symbol);
+            const trailingManagesTP = trailingConfig.enabled;
+            const needPlaceSL = !slOrder;
+            const needPlaceTP = !tpOrder && !trailingManagesTP;
+
+            // Also check tranche management
+            const symbolConfig = this.config?.symbols[position.symbol];
+            const trancheManagesTP = !!symbolConfig?.enableTrancheManagement;
+            const finalNeedTP = needPlaceTP && !trancheManagesTP;
+
+            if (needPlaceSL || finalNeedTP) {
+              // Critical protection check - log with appropriate severity
+              if (needPlaceSL && finalNeedTP) {
 logWithTimestamp(`PositionManager: [CRITICAL SYNC] Position ${key} has NO protective orders at all!`);
 logWithTimestamp(`PositionManager: This may indicate cancelled orders. Re-placing both SL and TP immediately`);
-            } else {
-logWithTimestamp(`PositionManager: Position ${key} missing protection (SL: ${!!slOrder}, TP: ${!!tpOrder})`);
-            }
+              } else if (needPlaceSL) {
+logWithTimestamp(`PositionManager: Position ${key} missing SL protection`);
+              } else {
+logWithTimestamp(`PositionManager: Position ${key} missing TP protection`);
+              }
 
-            // Ensure we have tracking for this position even if orders were cancelled
-            if (!this.positionOrders.has(key)) {
+              // Ensure we have tracking for this position even if orders were cancelled
+              if (!this.positionOrders.has(key)) {
 logWithTimestamp(`PositionManager: Re-establishing order tracking for position ${key}`);
-              this.positionOrders.set(key, {});
-            }
+                this.positionOrders.set(key, {});
+              }
 
-            await this.placeProtectiveOrdersWithLock(key, position, !slOrder, !tpOrder);
+              await this.placeProtectiveOrdersWithLock(key, position, needPlaceSL, finalNeedTP);
+            } else if (!tpOrder && (trailingManagesTP || trancheManagesTP)) {
+              // TP is intentionally absent — trailing TP or tranches are managing it
+              // Just make sure we have order tracking for SL
+              if (!this.positionOrders.has(key)) {
+                this.positionOrders.set(key, {});
+              }
+            }
           }
         }
       }
@@ -624,6 +661,12 @@ logWarnWithTimestamp(`PositionManager: Position ${key} not found in map`);
       if (!existingOrders?.tpOrderId) {
 logWithTimestamp(`PositionManager: Skipping position-level TP for ${symbol} — tranches handle per-entry TPs`);
       }
+    }
+
+    // When trailing TP is enabled, skip fixed TP — trailing TP manages the exit
+    const trailingConfig = this.getTrailingTPConfig(symbol);
+    if (trailingConfig.enabled) {
+      needTP = false;
     }
 
     if (needSL || needTP) {
@@ -1356,7 +1399,16 @@ logWithTimestamp(`PositionManager: WARNING - Position ${key} now missing SL prot
           } else if (orders.tpOrderId === orderId) {
             delete orders.tpOrderId;
 logWithTimestamp(`PositionManager: Removed cancelled TP order ${orderId} from tracking for ${key}`);
+            // Check if trailing TP is managing this position — if so, this is expected
+            const hasTrailingTP = Array.from(this.trailingTPState.values()).some(s => {
+              const stateKey = this.getPositionKey(s.symbol, s.positionSide, s.isLong ? s.quantity : -s.quantity);
+              return stateKey === key;
+            });
+            if (hasTrailingTP) {
+logWithTimestamp(`PositionManager: TP removed for ${key} — trailing TP is managing this position`);
+            } else {
 logWithTimestamp(`PositionManager: WARNING - Position ${key} now missing TP protection, will attempt to re-place`);
+            }
           }
 
           // CRITICAL FIX: Do NOT delete position tracking when orders are cancelled
@@ -1631,9 +1683,10 @@ logErrorWithTimestamp('PositionManager: Failed to check existing orders, proceed
     }
 
     try {
-      // Check if trailing TP is enabled globally — if so, skip placing a fixed TP order
+      // Check if trailing TP is enabled (per-symbol or global) — if so, skip placing a fixed TP order
       // Instead, register this position for trailing TP monitoring
-      if (this.config.global.enableTrailingTP && placeTP) {
+      const trailingConfig = this.getTrailingTPConfig(symbol);
+      if (trailingConfig.enabled && placeTP) {
         const trailingKey = this.getPositionKey(symbol, position.positionSide, posAmt);
         if (!this.trailingTPState.has(trailingKey)) {
           this.trailingTPState.set(trailingKey, {
@@ -1644,8 +1697,12 @@ logErrorWithTimestamp('PositionManager: Failed to check existing orders, proceed
             isLong,
             quantity,
             positionSide: position.positionSide || 'BOTH',
+            activationPercent: trailingConfig.activation,
+            callbackPercent: trailingConfig.callback,
           });
-logWithTimestamp(`PositionManager: Trailing TP registered for ${symbol} ${isLong ? 'LONG' : 'SHORT'} at entry ${entryPrice.toFixed(4)} (activation: ${this.config.global.trailingTPActivation ?? 0.5}%, callback: ${this.config.global.trailingTPCallback ?? 0.3}%)`);
+logWithTimestamp(`PositionManager: Trailing TP registered for ${symbol} ${isLong ? 'LONG' : 'SHORT'} at entry ${entryPrice.toFixed(4)} (activation: ${trailingConfig.activation}%, callback: ${trailingConfig.callback}%)`);
+          // Ensure trailing TP interval is running
+          this.ensureTrailingTPInterval();
         }
         placeTP = false; // Don't place fixed TP — trailing will manage it
       }
@@ -2690,21 +2747,32 @@ logWithTimestamp(`PositionManager: [Periodic Check] TP order ${tpOrder.orderId} 
         if (needsAdjustment) {
           await this.adjustProtectiveOrders(position, slOrder, tpOrder);
         } else if (!slOrder || !tpOrder) {
-          // Enhanced logging for missing protection
-          if (!slOrder && !tpOrder) {
+          // Check if trailing TP or tranches are managing the TP
+          const trailingConfig = this.getTrailingTPConfig(position.symbol);
+          const symbolConfig = this.config?.symbols[position.symbol];
+          const tpManagedExternally = trailingConfig.enabled || !!symbolConfig?.enableTrancheManagement;
+          const needPlaceSL = !slOrder;
+          const needPlaceTP = !tpOrder && !tpManagedExternally;
+
+          if (needPlaceSL || needPlaceTP) {
+            // Enhanced logging for missing protection
+            if (needPlaceSL && needPlaceTP) {
 logWithTimestamp(`PositionManager: [CRITICAL] Position ${key} has NO protective orders! Re-placing both SL and TP immediately`);
-          } else {
-logWithTimestamp(`PositionManager: [Periodic Check] Position ${key} missing protection (SL: ${!!slOrder}, TP: ${!!tpOrder})`);
-          }
+            } else if (needPlaceSL) {
+logWithTimestamp(`PositionManager: [Periodic Check] Position ${key} missing SL protection`);
+            } else {
+logWithTimestamp(`PositionManager: [Periodic Check] Position ${key} missing TP protection`);
+            }
 
-          // Check if we have tracking for this position
-          const existingTracking = this.positionOrders.get(key);
-          if (!existingTracking) {
+            // Check if we have tracking for this position
+            const existingTracking = this.positionOrders.get(key);
+            if (!existingTracking) {
 logWithTimestamp(`PositionManager: Creating new order tracking for position ${key}`);
-            this.positionOrders.set(key, {});
-          }
+              this.positionOrders.set(key, {});
+            }
 
-          await this.placeProtectiveOrdersWithLock(key, position, !slOrder, !tpOrder);
+            await this.placeProtectiveOrdersWithLock(key, position, needPlaceSL, needPlaceTP);
+          }
         }
       }
     } catch (error: any) {
@@ -2938,17 +3006,214 @@ logWithTimestamp(`PositionManager: Closed position ${symbol} ${side}`);
 
   // ===== Trailing Take Profit Monitoring =====
 
+  // Helper: get trailing TP config for a symbol (per-symbol overrides global)
+  private getTrailingTPConfig(symbol: string): { enabled: boolean; activation: number; callback: number } {
+    const symbolConfig = this.config.symbols[symbol];
+    const globalEnabled = this.config.global.enableTrailingTP === true;
+    const globalActivation = this.config.global.trailingTPActivation ?? 0.5;
+    const globalCallback = this.config.global.trailingTPCallback ?? 0.3;
+
+    // Per-symbol explicit setting takes priority
+    if (symbolConfig && symbolConfig.enableTrailingTP !== undefined) {
+      return {
+        enabled: symbolConfig.enableTrailingTP,
+        activation: symbolConfig.trailingTPActivation ?? globalActivation,
+        callback: symbolConfig.trailingTPCallback ?? globalCallback,
+      };
+    }
+
+    // Fall back to global config
+    return {
+      enabled: globalEnabled,
+      activation: globalActivation,
+      callback: globalCallback,
+    };
+  }
+
+  // Helper: check if trailing TP is enabled for any symbol (or globally)
+  private isTrailingTPEnabledForAny(): boolean {
+    if (this.config.global.enableTrailingTP) return true;
+    for (const symbol of Object.keys(this.config.symbols)) {
+      if (this.config.symbols[symbol].enableTrailingTP) return true;
+    }
+    return false;
+  }
+
+  // Ensure the trailing TP interval is running (lazy start)
+  private ensureTrailingTPInterval(): void {
+    if (!this.trailingTPInterval) {
+      this.trailingTPInterval = setInterval(() => this.checkTrailingTakeProfits(), 5 * 1000);
+logWithTimestamp(`PositionManager: Trailing TP monitoring started (lazy)`);
+    }
+  }
+
+  // Handle trailing TP config changes on config reload
+  private handleTrailingTPConfigChange(oldConfig: Config, newConfig: Config): void {
+    // Check all open positions — register newly enabled, unregister newly disabled
+    for (const position of this.currentPositions.values()) {
+      const posAmt = parseFloat(position.positionAmt);
+      if (Math.abs(posAmt) === 0) continue;
+
+      const symbol = position.symbol;
+      const isLong = posAmt > 0;
+      const trailingKey = this.getPositionKey(symbol, position.positionSide, posAmt);
+      const newTrailingConfig = this.getTrailingTPConfig(symbol);
+
+      if (newTrailingConfig.enabled) {
+        if (!this.trailingTPState.has(trailingKey)) {
+          // Newly enabled — register for trailing TP
+          const entryPrice = parseFloat(position.entryPrice);
+          this.trailingTPState.set(trailingKey, {
+            entryPrice,
+            highWatermark: entryPrice,
+            activated: false,
+            symbol,
+            isLong,
+            quantity: Math.abs(posAmt),
+            positionSide: position.positionSide || 'BOTH',
+            activationPercent: newTrailingConfig.activation,
+            callbackPercent: newTrailingConfig.callback,
+          });
+logWithTimestamp(`PositionManager: Trailing TP registered (config reload) for ${symbol} ${isLong ? 'LONG' : 'SHORT'} at entry ${entryPrice.toFixed(4)} (activation: ${newTrailingConfig.activation}%, callback: ${newTrailingConfig.callback}%)`);
+          // Cancel existing fixed TP order since trailing will manage it
+          this.cancelExistingTPForTrailing(symbol, position.positionSide, posAmt);
+          this.ensureTrailingTPInterval();
+        } else {
+          // Already registered — update config values if they changed
+          const state = this.trailingTPState.get(trailingKey)!;
+          state.activationPercent = newTrailingConfig.activation;
+          state.callbackPercent = newTrailingConfig.callback;
+        }
+      } else {
+        if (this.trailingTPState.has(trailingKey)) {
+          // Newly disabled — unregister
+          this.trailingTPState.delete(trailingKey);
+logWithTimestamp(`PositionManager: Trailing TP unregistered (config reload) for ${symbol} ${isLong ? 'LONG' : 'SHORT'}`);
+          // Will need to re-place fixed TP on next ensurePositionProtected cycle
+        }
+      }
+    }
+  }
+
+  // Cancel the existing fixed TP order for a position switching to trailing TP
+  private async cancelExistingTPForTrailing(symbol: string, positionSide: string, posAmt: number): Promise<void> {
+    try {
+      const key = this.getPositionKey(symbol, positionSide, posAmt);
+      const orders = this.positionOrders.get(key);
+      if (orders?.tpOrderId) {
+logWithTimestamp(`PositionManager: Cancelling fixed TP order ${orders.tpOrderId} for ${symbol} (key: ${key}) — switching to trailing TP`);
+        await this.cancelOrderById(symbol, orders.tpOrderId);
+        orders.tpOrderId = undefined;
+      } else {
+logWithTimestamp(`PositionManager: No fixed TP order found for ${symbol} (key: ${key}) to cancel`);
+      }
+    } catch (error: any) {
+logErrorWithTimestamp(`PositionManager: Failed to cancel TP for trailing switch on ${symbol}:`, error?.response?.data || error?.message);
+    }
+  }
+
+  // Register existing positions for trailing TP on startup/reconnect
+  private registerExistingPositionsForTrailingTP(): void {
+    for (const position of this.currentPositions.values()) {
+      const posAmt = parseFloat(position.positionAmt);
+      if (Math.abs(posAmt) === 0) continue;
+
+      const symbol = position.symbol;
+      const trailingConfig = this.getTrailingTPConfig(symbol);
+      if (!trailingConfig.enabled) continue;
+
+      const isLong = posAmt > 0;
+      const trailingKey = this.getPositionKey(symbol, position.positionSide, posAmt);
+      
+      if (this.trailingTPState.has(trailingKey)) continue; // Already registered
+
+      const entryPrice = parseFloat(position.entryPrice);
+      this.trailingTPState.set(trailingKey, {
+        entryPrice,
+        highWatermark: entryPrice, // We don't know the peak, start from entry
+        activated: false,
+        symbol,
+        isLong,
+        quantity: Math.abs(posAmt),
+        positionSide: position.positionSide || 'BOTH',
+        activationPercent: trailingConfig.activation,
+        callbackPercent: trailingConfig.callback,
+      });
+logWithTimestamp(`PositionManager: Trailing TP registered (startup) for ${symbol} ${isLong ? 'LONG' : 'SHORT'} at entry ${entryPrice.toFixed(4)} (activation: ${trailingConfig.activation}%, callback: ${trailingConfig.callback}%)`);
+      // Cancel existing fixed TP order — trailing TP will manage the exit
+      this.cancelExistingTPForTrailing(symbol, position.positionSide, posAmt);
+    }
+  }
+
+  // Get trailing TP state for WebSocket broadcast
+  public getTrailingTPStateForBroadcast(): Record<string, {
+    symbol: string;
+    side: string;
+    entryPrice: number;
+    activated: boolean;
+    highWatermark: number;
+    trailStopPrice: number;
+    profitPercent: number;
+    activationPercent: number;
+    callbackPercent: number;
+  }> {
+    const result: Record<string, any> = {};
+    for (const [key, state] of this.trailingTPState.entries()) {
+      const side = state.isLong ? 'LONG' : 'SHORT';
+      const posKey = `${state.symbol}_${side}`;
+      
+      // Calculate trail stop price (price at which trailing TP would trigger)
+      let trailStopPrice = 0;
+      if (state.activated && state.highWatermark > 0) {
+        if (state.isLong) {
+          trailStopPrice = state.highWatermark * (1 - state.callbackPercent / 100);
+        } else {
+          trailStopPrice = state.highWatermark * (1 + state.callbackPercent / 100);
+        }
+      }
+
+      // Approximate current profit
+      let profitPercent = 0;
+      try {
+        // Use last known mark price from currentPositions
+        for (const pos of this.currentPositions.values()) {
+          if (pos.symbol === state.symbol) {
+            const markPrice = parseFloat(pos.markPrice);
+            if (markPrice > 0) {
+              profitPercent = state.isLong
+                ? ((markPrice - state.entryPrice) / state.entryPrice) * 100
+                : ((state.entryPrice - markPrice) / state.entryPrice) * 100;
+            }
+            break;
+          }
+        }
+      } catch {}
+
+      result[posKey] = {
+        symbol: state.symbol,
+        side,
+        entryPrice: state.entryPrice,
+        activated: state.activated,
+        highWatermark: state.highWatermark,
+        trailStopPrice,
+        profitPercent,
+        activationPercent: state.activationPercent,
+        callbackPercent: state.callbackPercent,
+      };
+    }
+    return result;
+  }
+
   private async checkTrailingTakeProfits(): Promise<void> {
     if (this.trailingTPState.size === 0) return;
 
     const { getPriceService } = await import('../services/priceService');
     const priceService = getPriceService();
-    
-    const activationPercent = this.config.global.trailingTPActivation ?? 0.5;
-    const callbackPercent = this.config.global.trailingTPCallback ?? 0.3;
 
     for (const [key, state] of this.trailingTPState.entries()) {
       try {
+        const { activationPercent, callbackPercent } = state;
+
         // Check if position still exists
         let positionStillOpen = false;
         for (const position of this.currentPositions.values()) {
@@ -3041,6 +3306,11 @@ logWithTimestamp(`PositionManager: Trailing TP deactivated for ${state.symbol} -
       } catch (error) {
 logErrorWithTimestamp(`PositionManager: Trailing TP check error for ${key}:`, error);
       }
+    }
+
+    // Broadcast trailing TP state to UI every cycle
+    if (this.statusBroadcaster && this.trailingTPState.size > 0) {
+      this.statusBroadcaster.broadcastTrailingTPState(this.getTrailingTPStateForBroadcast());
     }
   }
 

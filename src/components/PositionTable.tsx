@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart3, TrendingUp, TrendingDown, Shield, Target, ChevronDown, X, AlertTriangle, Plus, LineChart, Scissors } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Shield, Target, ChevronDown, X, AlertTriangle, Plus, LineChart, Scissors, Crosshair } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -42,6 +42,18 @@ interface VWAPData {
   timestamp: number;
 }
 
+interface TrailingTPData {
+  symbol: string;
+  side: string;
+  entryPrice: number;
+  activated: boolean;
+  highWatermark: number;
+  trailStopPrice: number;
+  profitPercent: number;
+  activationPercent: number;
+  callbackPercent: number;
+}
+
 interface PositionTableProps {
   positions?: Position[];
   onClosePosition?: (symbol: string, side: 'LONG' | 'SHORT') => void;
@@ -58,6 +70,7 @@ export default function PositionTable({
   const [markPrices, setMarkPrices] = useState<Record<string, number>>({});
   const [vwapData, setVwapData] = useState<Record<string, VWAPData>>({});
   const [protectionStatus, setProtectionStatus] = useState<Record<string, boolean>>({});
+  const [trailingTPData, setTrailingTPData] = useState<Record<string, TrailingTPData>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [closePositionModal, setClosePositionModal] = useState<{
     isOpen: boolean;
@@ -226,6 +239,11 @@ export default function PositionTable({
           const { symbol, side, isActive } = message.data;
           const key = `${symbol}_${side}`;
           setProtectionStatus(prev => ({ ...prev, [key]: isActive }));
+        } else if (message.type === 'trailing_tp_state') {
+          // Update trailing TP state for all positions
+          if (message.data?.positions) {
+            setTrailingTPData(message.data.positions);
+          }
         }
       };
 
@@ -679,6 +697,7 @@ export default function PositionTable({
                 const symbolConfig = config?.symbols?.[position.symbol];
                 const hasVwapProtection = symbolConfig?.vwapProtection;
                 const isProtected = protectionStatus[`${position.symbol}_${position.side}`];
+                const mobileTrailingTP = trailingTPData[`${position.symbol}_${position.side}`];
 
                 return (
                   <div key={key} className="border rounded-lg p-3 space-y-2">
@@ -774,6 +793,18 @@ export default function PositionTable({
                           ${formatPrice(position.symbol, vwap.value)}
                         </Badge>
                       )}
+                      {mobileTrailingTP && (
+                        <Badge variant="outline" className={`h-5 text-[10px] px-1.5 ${
+                          mobileTrailingTP.activated
+                            ? 'border-purple-600 text-purple-600 bg-purple-600/10'
+                            : 'border-purple-400 text-purple-400'
+                        }`}>
+                          <Crosshair className="h-3 w-3 mr-0.5" />
+                          {mobileTrailingTP.activated
+                            ? `Trail: $${formatPrice(position.symbol, mobileTrailingTP.trailStopPrice)}`
+                            : `Trail: +${mobileTrailingTP.activationPercent}%`}
+                        </Badge>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -866,6 +897,7 @@ export default function PositionTable({
               const vwap = vwapData[position.symbol];
               const symbolConfig = config?.symbols?.[position.symbol];
               const hasVwapProtection = symbolConfig?.vwapProtection;
+              const trailingTP = trailingTPData[`${position.symbol}_${position.side}`];
 
               return (
                 <TableRow key={key} className="h-12">
@@ -1028,12 +1060,44 @@ export default function PositionTable({
                                     <BarChart3 className="h-3 w-3 text-muted-foreground animate-pulse" />
                                   </Badge>
                                 ) : null}
+                                {trailingTP ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`h-5 w-5 p-0 ${
+                                      trailingTP.activated
+                                        ? 'border-purple-600 bg-purple-600/10'
+                                        : 'border-purple-400'
+                                    }`}
+                                  >
+                                    <Crosshair className={`h-3 w-3 ${
+                                      trailingTP.activated
+                                        ? 'text-purple-600 animate-pulse'
+                                        : 'text-purple-400'
+                                    }`} />
+                                  </Badge>
+                                ) : null}
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
                               <div className="text-xs space-y-1">
                                 <p>Stop Loss: {position.hasStopLoss ? '✅ Active' : '❌ Inactive'}</p>
                                 <p>Take Profit: {position.hasTakeProfit ? '✅ Active' : '❌ Inactive'}</p>
+                                {trailingTP && (
+                                  <>
+                                    <p className="font-medium text-purple-400">
+                                      Trailing TP: {trailingTP.activated ? '🎯 ACTIVE' : '⏳ Waiting'}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      Activates at +{trailingTP.activationPercent}%, callback {trailingTP.callbackPercent}%
+                                    </p>
+                                    {trailingTP.activated && (
+                                      <>
+                                        <p>Peak: ${formatPrice(position.symbol, trailingTP.highWatermark)}</p>
+                                        <p>Trail Stop: ${formatPrice(position.symbol, trailingTP.trailStopPrice)}</p>
+                                      </>
+                                    )}
+                                  </>
+                                )}
                                 {hasVwapProtection && vwap && (
                                   <>
                                     <p>VWAP: ${formatPrice(position.symbol, vwap.value)}</p>
@@ -1053,6 +1117,13 @@ export default function PositionTable({
                       {hasVwapProtection && vwap && (
                         <div className="text-[9px] text-muted-foreground font-mono">
                           V:${formatPrice(position.symbol, vwap.value)}
+                        </div>
+                      )}
+                      {trailingTP && (
+                        <div className={`text-[9px] font-mono ${trailingTP.activated ? 'text-purple-400' : 'text-muted-foreground'}`}>
+                          {trailingTP.activated
+                            ? `Trail: $${formatPrice(position.symbol, trailingTP.trailStopPrice)}`
+                            : `Trail: +${trailingTP.activationPercent}%`}
                         </div>
                       )}
                     </div>

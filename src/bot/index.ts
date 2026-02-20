@@ -21,6 +21,7 @@ import { accountHealthMonitor } from '../lib/services/accountHealthMonitor';
 import { ftaExitService } from '../lib/services/ftaExitService';
 import { tradeQualityDb } from '../lib/db/tradeQualityDb';
 import { getMAEService } from '../lib/services/maeService';
+import { FundingRateCollector } from '../lib/services/fundingRateCollector';
 import { logWithTimestamp, logErrorWithTimestamp, logWarnWithTimestamp } from '../lib/utils/timestamp';
 import { updateDynamicPositionSizes } from '../lib/utils/positionSizing';
 import { getPaperTradingManager } from '../lib/paperTrading';
@@ -50,6 +51,7 @@ class AsterBot {
   private tradeSizeWarnings: any[] = [];
   private cleanupScheduler: any = null;
   private positionSizingInterval: NodeJS.Timeout | null = null;
+  private fundingRateCollector: FundingRateCollector | null = null;
 
   constructor() {
     // Will be initialized with config port
@@ -800,6 +802,16 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
         // Continue without MAE tracking
       }
 
+      // Initialize Funding Rate Collector (for correlation analysis)
+      try {
+        this.fundingRateCollector = new FundingRateCollector(this.config);
+        await this.fundingRateCollector.start();
+        logWithTimestamp('✅ Funding Rate Collector started (polling every 15 minutes, backfilling 30 days history)');
+      } catch (error: any) {
+        logErrorWithTimestamp('⚠️  Funding Rate Collector failed to start:', error.message);
+        // Continue without funding rate tracking
+      }
+
       // Initialize Hunter (or reuse existing instance to prevent duplicate listeners)
       if (!this.hunter) {
         this.hunter = new Hunter(this.config, this.isHedgeMode);
@@ -815,6 +827,11 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
       // Inject position tracker for position limit checks
       if (this.positionManager) {
         this.hunter.setPositionTracker(this.positionManager);
+      }
+
+      // Inject funding rate collector for snapshots at trade entry
+      if (this.fundingRateCollector) {
+        this.hunter.setFundingRateCollector(this.fundingRateCollector);
       }
 
       // Connect hunter events to position manager and status broadcaster
@@ -1150,6 +1167,12 @@ logWithTimestamp('✅ VWAP symbols updated');
         }
       }
 
+      // Update Funding Rate Collector with new symbols
+      if (this.fundingRateCollector) {
+        this.fundingRateCollector.updateConfig(newConfig);
+logWithTimestamp('✅ Funding Rate Collector config updated');
+      }
+
       // Broadcast config update to web UI
       this.statusBroadcaster.broadcast('config_updated', {
         timestamp: new Date(),
@@ -1247,6 +1270,12 @@ logWithTimestamp('✅ Cleanup scheduler stopped');
         this.positionSizingInterval = null;
       }
 logWithTimestamp('✅ Position sizing updater stopped');
+
+      // Stop Funding Rate Collector
+      if (this.fundingRateCollector) {
+        this.fundingRateCollector.stop();
+      }
+logWithTimestamp('✅ Funding Rate Collector stopped');
 
       // Flush liquidation buffer to prevent data loss
       const { liquidationStorage } = await import('../lib/services/liquidationStorage');

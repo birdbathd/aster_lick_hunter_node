@@ -111,12 +111,14 @@ export class PaperTradingManager extends EventEmitter {
   async placeOrder(params: {
     symbol: string;
     side: 'BUY' | 'SELL';
-    type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+    type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'TRAILING_STOP_MARKET';
     quantity: number;
     price?: number;
     stopPrice?: number;
     reduceOnly?: boolean;
     positionSide?: 'LONG' | 'SHORT' | 'BOTH';
+    activationPrice?: number;
+    callbackRate?: number;
   }): Promise<SimulatedOrderResult> {
     if (!this.isInitialized) {
       await this.initialize();

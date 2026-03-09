@@ -119,6 +119,18 @@ export interface AccountHealthConfig {
   maxDCAEntries?: number;                // Max number of DCA entries per position direction (default: 0 = unlimited)
 }
 
+export interface AdaptiveThresholdConfig {
+  enabled?: boolean;                    // Enable adaptive threshold adjustment (default: false)
+  targetPercentile?: number;            // Target percentile of liquidation volumes 50-99 (default: 80 = trigger on top 20%)
+  lookbackHours?: number;               // Hours of liquidation data to analyze 1-168 (default: 24)
+  updateIntervalMinutes?: number;       // Minutes between threshold recalculations 5-60 (default: 15)
+  smoothingFactor?: number;             // EMA smoothing 0.1-1.0 (default: 0.3, lower = slower adaptation)
+  minThreshold?: number;                // Absolute minimum threshold in USDT (default: 1000)
+  maxThreshold?: number;                // Absolute maximum threshold in USDT (default: 100000)
+  maxAdjustmentPercent?: number;        // Max % deviation from static config value 10-200 (default: 50)
+  minSamples?: number;                  // Minimum liquidation count needed before adapting (default: 20)
+}
+
 export interface GlobalConfig {
   riskPercent: number;     // Max risk per trade as % of account balance
   paperMode: boolean;      // If true, simulate trades without executing
@@ -141,6 +153,7 @@ export interface GlobalConfig {
   cascadeProtection?: CascadeProtectionConfig; // Cascade detection & circuit breaker settings
   accountHealth?: AccountHealthConfig; // Account drawdown & health monitoring settings
   paperTrading?: PaperTradingConfig; // Paper trading configuration
+  adaptiveThresholds?: AdaptiveThresholdConfig; // Adaptive threshold adjustment settings
 }
 
 export interface Config {

@@ -16,6 +16,7 @@ import { getRateLimitManager } from '../lib/api/rateLimitManager';
 import { startRateLimitLogging } from '../lib/api/rateLimitMonitor';
 import { initializeRateLimitToasts } from '../lib/api/rateLimitToasts';
 import { thresholdMonitor } from '../lib/services/thresholdMonitor';
+import { adaptiveThresholdService } from '../lib/services/adaptiveThresholdService';
 import { cascadeDetector } from '../lib/services/cascadeDetector';
 import { accountHealthMonitor } from '../lib/services/accountHealthMonitor';
 import { ftaExitService } from '../lib/services/ftaExitService';
@@ -1155,6 +1156,7 @@ logWithTimestamp('✅ Hunter config updated');
 
       // Update threshold monitor with new config
       thresholdMonitor.updateConfig(newConfig);
+      adaptiveThresholdService.updateConfig(newConfig);
 logWithTimestamp('✅ Threshold monitor config updated');
 
       // Update PositionManager with new config

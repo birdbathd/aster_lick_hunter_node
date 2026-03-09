@@ -34,6 +34,9 @@ interface Position {
   liquidationPrice?: number;
   hasStopLoss?: boolean;
   hasTakeProfit?: boolean;
+  tpType?: string;
+  tpActivatePrice?: number;
+  tpPriceRate?: number;
 }
 
 interface VWAPData {
@@ -794,8 +797,16 @@ export default function PositionTable({
                         </Badge>
                       )}
                       {position.hasTakeProfit ? (
-                        <Badge variant="outline" className="h-5 text-[10px] px-1.5 border-blue-600 text-blue-600">
-                          <Target className="h-3 w-3 mr-0.5" />TP
+                        <Badge variant="outline" className={`h-5 text-[10px] px-1.5 ${
+                          position.tpType === 'TRAILING_STOP_MARKET'
+                            ? 'border-purple-600 text-purple-600'
+                            : 'border-blue-600 text-blue-600'
+                        }`}>
+                          {position.tpType === 'TRAILING_STOP_MARKET' ? (
+                            <><Crosshair className="h-3 w-3 mr-0.5" />Trail TP</>
+                          ) : (
+                            <><Target className="h-3 w-3 mr-0.5" />TP</>
+                          )}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-muted-foreground">
@@ -823,6 +834,11 @@ export default function PositionTable({
                             ? `Trail: $${formatPrice(position.symbol, mobileTrailingTP.trailStopPrice)}`
                             : `Trail: +${mobileTrailingTP.activationPercent}%`}
                         </Badge>
+                      )}
+                      {!mobileTrailingTP && position.tpType === 'TRAILING_STOP_MARKET' && position.tpPriceRate && (
+                        <span className="text-[10px] text-purple-400 font-mono">
+                          CB:{position.tpPriceRate}%
+                        </span>
                       )}
                       {mobileFundingRate && (
                         <span className={`text-[10px] font-mono ${
@@ -1060,8 +1076,16 @@ export default function PositionTable({
                                   </Badge>
                                 )}
                                 {position.hasTakeProfit ? (
-                                  <Badge variant="outline" className="h-5 w-5 p-0 border-blue-600">
-                                    <Target className="h-3 w-3 text-blue-600" />
+                                  <Badge variant="outline" className={`h-5 w-5 p-0 ${
+                                    position.tpType === 'TRAILING_STOP_MARKET'
+                                      ? 'border-purple-600'
+                                      : 'border-blue-600'
+                                  }`}>
+                                    {position.tpType === 'TRAILING_STOP_MARKET' ? (
+                                      <Crosshair className="h-3 w-3 text-purple-600" />
+                                    ) : (
+                                      <Target className="h-3 w-3 text-blue-600" />
+                                    )}
                                   </Badge>
                                 ) : (
                                   <Badge variant="outline" className="h-5 w-5 p-0">
@@ -1113,7 +1137,24 @@ export default function PositionTable({
                             <TooltipContent>
                               <div className="text-xs space-y-1">
                                 <p>Stop Loss: {position.hasStopLoss ? '✅ Active' : '❌ Inactive'}</p>
-                                <p>Take Profit: {position.hasTakeProfit ? '✅ Active' : '❌ Inactive'}</p>
+                                <p>Take Profit: {position.hasTakeProfit
+                                  ? position.tpType === 'TRAILING_STOP_MARKET'
+                                    ? '🎯 Trailing TP (Exchange)'
+                                    : '✅ Active'
+                                  : '❌ Inactive'}</p>
+                                {!trailingTP && position.tpType === 'TRAILING_STOP_MARKET' && (
+                                  <>
+                                    <p className="font-medium text-purple-400">
+                                      Exchange Trailing Stop
+                                    </p>
+                                    {position.tpActivatePrice && (
+                                      <p>Activation: ${formatPrice(position.symbol, position.tpActivatePrice)}</p>
+                                    )}
+                                    {position.tpPriceRate && (
+                                      <p>Callback Rate: {position.tpPriceRate}%</p>
+                                    )}
+                                  </>
+                                )}
                                 {trailingTP && (
                                   <>
                                     <p className="font-medium text-purple-400">

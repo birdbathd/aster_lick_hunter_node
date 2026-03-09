@@ -9,7 +9,7 @@ export interface SimulatedOrderResult {
   orderId: string;
   symbol: string;
   side: 'BUY' | 'SELL';
-  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'TRAILING_STOP_MARKET';
   status: 'NEW' | 'FILLED' | 'PARTIALLY_FILLED' | 'REJECTED';
   executedQty: string;
   price: string;
@@ -90,7 +90,7 @@ export class OrderSimulator {
   async simulateOrder(params: {
     symbol: string;
     side: 'BUY' | 'SELL';
-    type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+    type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'TRAILING_STOP_MARKET';
     quantity: number;
     price?: number;
     stopPrice?: number;

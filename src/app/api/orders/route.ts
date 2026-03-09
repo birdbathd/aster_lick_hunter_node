@@ -27,6 +27,8 @@ export const GET = withAuth(async (request: NextRequest, _user) => {
       side: order.side,
       price: order.price ? parseFloat(order.price) : undefined,
       stopPrice: order.stopPrice ? parseFloat(order.stopPrice) : undefined,
+      activatePrice: order.activatePrice || undefined,
+      priceRate: order.priceRate || undefined,
       quantity: parseFloat(order.origQty || '0'),
       reduceOnly: order.reduceOnly,
       status: order.status,

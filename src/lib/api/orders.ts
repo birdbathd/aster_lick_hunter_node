@@ -14,13 +14,16 @@ const BASE_URL = 'https://fapi.asterdex.com';
 export async function placeOrder(params: {
   symbol: string;
   side: 'BUY' | 'SELL';
-  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'TRAILING_STOP_MARKET';
   quantity: number;
   price?: number;
   stopPrice?: number;
   reduceOnly?: boolean;
   positionSide?: 'BOTH' | 'LONG' | 'SHORT';
   timeInForce?: 'GTC' | 'IOC' | 'FOK' | 'GTX';
+  activationPrice?: number;
+  callbackRate?: number;
+  newClientOrderId?: string;
 }, credentials: ApiCredentials): Promise<Order> {
   // Check if paper mode is enabled
   const config = configManager.getConfig();
@@ -135,9 +138,11 @@ export async function placeOrder(params: {
 type OrderParams = {
   symbol: string;
   side: 'BUY' | 'SELL';
-  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'TRAILING_STOP_MARKET';
   quantity: number;
   price?: number;
+  activationPrice?: number;
+  callbackRate?: number;
   stopPrice?: number;
   reduceOnly?: boolean;
   positionSide?: 'BOTH' | 'LONG' | 'SHORT';

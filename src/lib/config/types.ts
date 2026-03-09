@@ -97,6 +97,18 @@ export const accountHealthConfigSchema = z.object({
   maxDCAEntries: z.number().min(0).optional(),
 }).optional();
 
+export const adaptiveThresholdConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  targetPercentile: z.number().min(50).max(99).optional(),
+  lookbackHours: z.number().min(1).max(168).optional(),
+  updateIntervalMinutes: z.number().min(5).max(60).optional(),
+  smoothingFactor: z.number().min(0.1).max(1.0).optional(),
+  minThreshold: z.number().min(0).optional(),
+  maxThreshold: z.number().min(0).optional(),
+  maxAdjustmentPercent: z.number().min(10).max(200).optional(),
+  minSamples: z.number().min(1).optional(),
+}).optional();
+
 export const globalConfigSchema = z.object({
   riskPercent: z.number().min(0).max(100),
   paperMode: z.boolean(),
@@ -114,6 +126,7 @@ export const globalConfigSchema = z.object({
   server: serverConfigSchema,
   rateLimit: rateLimitConfigSchema,
   accountHealth: accountHealthConfigSchema,
+  adaptiveThresholds: adaptiveThresholdConfigSchema,
   liquidationDatabase: z.object({
     retentionDays: z.number().min(0).optional(),
     cleanupIntervalHours: z.number().min(1).optional(),

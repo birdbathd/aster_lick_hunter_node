@@ -146,8 +146,6 @@ export default function TradingViewChart({
   const [fundingRateHover, setFundingRateHover] = useState<string | null>(null);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [showPositions, setShowPositions] = useState(true); // Show TP/SL lines
-  const [trailingTPData, setTrailingTPData] = useState<Record<string, any>>({});
-  const trailingTPLinesRef = useRef<any[]>([]);
   const [chartReady, setChartReady] = useState(0);
   const [magnetMode, setMagnetMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -300,6 +298,40 @@ export default function TradingViewChart({
 
     symbolOrders.forEach(order => {
       try {
+        const isTrailingStop = order.type === 'TRAILING_STOP_MARKET';
+
+        if (isTrailingStop) {
+          // Trailing stop market — show activation price and current trail stop
+          const activatePrice = parseFloat(order.activatePrice || '0');
+          const trailStopPrice = parseFloat(order.stopPrice || '0');
+          const callbackRate = parseFloat(order.priceRate || '0');
+
+          if (activatePrice > 0) {
+            const activationLine = candlestickSeriesRef.current!.createPriceLine({
+              price: activatePrice,
+              color: '#a855f7', // Purple
+              lineWidth: 1,
+              lineStyle: 2, // Dotted
+              axisLabelVisible: true,
+              title: `Trail Arm: ${activatePrice}`,
+            });
+            positionLinesRef.current.push(activationLine);
+          }
+
+          if (trailStopPrice > 0) {
+            const trailLine = candlestickSeriesRef.current!.createPriceLine({
+              price: trailStopPrice,
+              color: '#a855f7', // Purple
+              lineWidth: 2,
+              lineStyle: 0, // Solid
+              axisLabelVisible: true,
+              title: `Trail Stop: ${trailStopPrice} (${callbackRate}%)`,
+            });
+            positionLinesRef.current.push(trailLine);
+          }
+          return;
+        }
+
         const orderPrice = parseFloat(order.stopPrice || order.price || '0');
         
         if (orderPrice > 0) {
@@ -811,91 +843,8 @@ export default function TradingViewChart({
         }
       });
       positionLinesRef.current = [];
-      // Also clear trailing TP lines
-      trailingTPLinesRef.current.forEach(line => {
-        try { candlestickSeriesRef.current?.removePriceLine(line); } catch (_e) {}
-      });
-      trailingTPLinesRef.current = [];
     }
   }, [positions, openOrders, showPositions, updatePositionIndicators, chartReady]);
-
-  // Listen for trailing TP state from WebSocket
-  useEffect(() => {
-    const handleMessage = (message: any) => {
-      if (message.type === 'trailing_tp_state' && message.data?.positions) {
-        setTrailingTPData(message.data.positions);
-      }
-    };
-    const cleanup = websocketService.addMessageHandler(handleMessage);
-    return cleanup;
-  }, []);
-
-  // Draw trailing TP lines on chart when state updates
-  useEffect(() => {
-    if (!candlestickSeriesRef.current || !showPositions) return;
-
-    // Clear existing trailing TP lines
-    trailingTPLinesRef.current.forEach(line => {
-      try { candlestickSeriesRef.current?.removePriceLine(line); } catch (_e) {}
-    });
-    trailingTPLinesRef.current = [];
-
-    // Find trailing TP data for positions on this symbol
-    const symbolPositions = positions.filter(pos => pos.symbol === symbol);
-    symbolPositions.forEach(position => {
-      const key = `${position.symbol}_${position.side}`;
-      const trailing = trailingTPData[key];
-      if (!trailing) return;
-
-      const entryPrice = parseFloat(position.entryPrice || '0');
-      if (entryPrice <= 0) return;
-
-      const isLong = position.side === 'LONG';
-
-      // Always show activation price line (where trailing TP arms)
-      const activationPrice = isLong
-        ? entryPrice * (1 + trailing.activationPercent / 100)
-        : entryPrice * (1 - trailing.activationPercent / 100);
-
-      if (!trailing.activated) {
-        // Not yet activated — show dashed purple activation line
-        const activationLine = candlestickSeriesRef.current!.createPriceLine({
-          price: activationPrice,
-          color: '#a855f7', // Purple
-          lineWidth: 1,
-          lineStyle: 2, // Dotted
-          axisLabelVisible: true,
-          title: `Trail Arm: ${activationPrice.toFixed(4)} (+${trailing.activationPercent}%)`,
-        });
-        trailingTPLinesRef.current.push(activationLine);
-      } else {
-        // Activated — show peak and trail stop
-        if (trailing.highWatermark > 0) {
-          const peakLine = candlestickSeriesRef.current!.createPriceLine({
-            price: trailing.highWatermark,
-            color: '#c084fc', // Light purple
-            lineWidth: 1,
-            lineStyle: 1, // Dashed
-            axisLabelVisible: true,
-            title: `Peak: ${trailing.highWatermark.toFixed(4)}`,
-          });
-          trailingTPLinesRef.current.push(peakLine);
-        }
-
-        if (trailing.trailStopPrice > 0) {
-          const trailLine = candlestickSeriesRef.current!.createPriceLine({
-            price: trailing.trailStopPrice,
-            color: '#a855f7', // Purple
-            lineWidth: 2,
-            lineStyle: 0, // Solid
-            axisLabelVisible: true,
-            title: `Trail Stop: ${trailing.trailStopPrice.toFixed(4)}`,
-          });
-          trailingTPLinesRef.current.push(trailLine);
-        }
-      }
-    });
-  }, [trailingTPData, symbol, positions, showPositions]);
 
   // --- Recent orders overlay logic ---
   // Fetch from local trade history DB for deep history, with orderStore as real-time supplement

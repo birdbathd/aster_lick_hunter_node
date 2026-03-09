@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { Config, LiquidationEvent } from '../types';
+import { adaptiveThresholdService } from './adaptiveThresholdService';
 
 export interface ThresholdStatus {
   symbol: string;
@@ -64,10 +65,15 @@ export class ThresholdMonitor extends EventEmitter {
     for (const [symbol, symbolConfig] of Object.entries(this.config.symbols)) {
       // Only process symbols that have threshold enabled
       if (symbolConfig.useThreshold) {
+        // Use adaptive thresholds if available, otherwise static config
+        const longThresh = adaptiveThresholdService.getEffectiveThreshold(symbol, 'long')
+          || (symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
+        const shortThresh = adaptiveThresholdService.getEffectiveThreshold(symbol, 'short')
+          || (symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
         this.thresholdStatuses.set(symbol, {
           symbol,
-          longThreshold: symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000,
-          shortThreshold: symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000,
+          longThreshold: longThresh,
+          shortThreshold: shortThresh,
           recentLongVolume: 0,
           recentShortVolume: 0,
           longProgress: 0,
@@ -100,20 +106,26 @@ export class ThresholdMonitor extends EventEmitter {
       if (symbolConfig.useThreshold) {
         const existing = this.thresholdStatuses.get(symbol);
         if (existing) {
-          // Update thresholds and time window
-          existing.longThreshold = symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000;
-          existing.shortThreshold = symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000;
+          // Update thresholds - use adaptive if available, otherwise static config
+          existing.longThreshold = adaptiveThresholdService.getEffectiveThreshold(symbol, 'long')
+            || (symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
+          existing.shortThreshold = adaptiveThresholdService.getEffectiveThreshold(symbol, 'short')
+            || (symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
           existing.timeWindow = symbolConfig.thresholdTimeWindow || this.timeWindow;
           existing.lastUpdate = Date.now();
           // Clean up old liquidations with new time window
           this.cleanOldLiquidations(existing, Date.now());
           this.recalculateProgress(existing);
         } else {
-          // Add new symbol
+          // Add new symbol - use adaptive if available, otherwise static config
+          const newLongThresh = adaptiveThresholdService.getEffectiveThreshold(symbol, 'long')
+            || (symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
+          const newShortThresh = adaptiveThresholdService.getEffectiveThreshold(symbol, 'short')
+            || (symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000);
           this.thresholdStatuses.set(symbol, {
             symbol,
-            longThreshold: symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000,
-            shortThreshold: symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 10000,
+            longThreshold: newLongThresh,
+            shortThreshold: newShortThresh,
             recentLongVolume: 0,
             recentShortVolume: 0,
             longProgress: 0,

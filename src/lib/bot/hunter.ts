@@ -13,6 +13,7 @@ import { vwapService } from '../services/vwapService';
 import { vwapStreamer } from '../services/vwapStreamer';
 import { thresholdMonitor } from '../services/thresholdMonitor';
 import { tradeQualityService, TradeQualityScore } from '../services/tradeQualityService';
+import { adaptiveThresholdService } from '../services/adaptiveThresholdService';
 import { symbolPrecision } from '../utils/symbolPrecision';
 import { calculatePositionSize } from '../utils/positionSizing';
 import {
@@ -56,6 +57,16 @@ export class Hunter extends EventEmitter {
 
     // Initialize threshold monitor with config
     thresholdMonitor.updateConfig(config);
+
+    // Initialize adaptive threshold service
+    adaptiveThresholdService.updateConfig(config);
+    
+    // When adaptive thresholds update, refresh threshold monitor so cumulative window uses new values
+    adaptiveThresholdService.on('thresholds_updated', () => {
+      if (this.config) {
+        thresholdMonitor.updateConfig(this.config);
+      }
+    });
 
     // Initialize cascade detector with config
     const cascadeConfig = config.global.cascadeProtection;
@@ -108,6 +119,9 @@ export class Hunter extends EventEmitter {
 
     // Update threshold monitor configuration
     thresholdMonitor.updateConfig(newConfig);
+
+    // Update adaptive threshold service
+    adaptiveThresholdService.updateConfig(newConfig);
 
     // Log significant changes
     if (oldConfig.global.paperMode !== newConfig.global.paperMode) {
@@ -757,9 +771,12 @@ logWithTimestamp(`Hunter: ✓ Cooldown passed - Triggering ${tradeSide} trade fo
       // Check direction-specific volume thresholds
       // SELL liquidation means longs are getting liquidated, we might want to BUY
       // BUY liquidation means shorts are getting liquidated, we might want to SELL
-      const thresholdToCheck = liquidation.side === 'SELL'
-        ? (symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 0)
-        : (symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 0);
+      // Use adaptive threshold if enabled, otherwise fall back to static config
+      const thresholdSide = liquidation.side === 'SELL' ? 'long' : 'short';
+      const thresholdToCheck = adaptiveThresholdService.getEffectiveThreshold(liquidation.symbol, thresholdSide)
+        || (liquidation.side === 'SELL'
+          ? (symbolConfig.longVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 0)
+          : (symbolConfig.shortVolumeThresholdUSDT ?? symbolConfig.volumeThresholdUSDT ?? 0));
 
       if (volumeUSDT < thresholdToCheck) return; // Too small
 

@@ -102,7 +102,7 @@ class TradeHistoryDb {
         update_time INTEGER NOT NULL,
         source TEXT DEFAULT 'websocket',
         created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
-        UNIQUE(symbol, order_id, update_time)
+        UNIQUE(symbol, order_id)
       );
 
       CREATE INDEX IF NOT EXISTS idx_trade_history_symbol ON trade_history(symbol);
@@ -159,6 +159,109 @@ class TradeHistoryDb {
     } catch (_) {
       // Column already exists — ignore
     }
+
+    // Migration: Fix unique constraint from (symbol, order_id, update_time) to (symbol, order_id)
+    // The old constraint allowed duplicates when update_time differed by a few ms between websocket and API backfill
+    this.migrateUniqueConstraint();
+  }
+
+  /**
+   * Migrate the unique constraint on trade_history from (symbol, order_id, update_time)
+   * to (symbol, order_id). This requires rebuilding the table since SQLite cannot alter constraints.
+   * Also deduplicates existing records, keeping the websocket source (or latest) for each order.
+   */
+  private migrateUniqueConstraint(): void {
+    // Check if migration is needed by looking for the old constraint
+    const indexInfo = this.db.prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='trade_history'`
+    ).get() as { sql: string } | undefined;
+    
+    if (!indexInfo || !indexInfo.sql.includes('order_id, update_time')) {
+      return; // Already migrated or new table
+    }
+
+    console.log('[TradeHistoryDb] Migrating unique constraint: (symbol, order_id, update_time) → (symbol, order_id)');
+    
+    const transaction = this.db.transaction(() => {
+      // 1. Create new table with correct constraint
+      this.db.exec(`
+        CREATE TABLE trade_history_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          symbol TEXT NOT NULL,
+          order_id INTEGER NOT NULL,
+          client_order_id TEXT,
+          side TEXT NOT NULL,
+          position_side TEXT DEFAULT 'BOTH',
+          order_type TEXT NOT NULL,
+          orig_type TEXT,
+          status TEXT NOT NULL,
+          price TEXT DEFAULT '0',
+          avg_price TEXT DEFAULT '0',
+          orig_qty TEXT DEFAULT '0',
+          executed_qty TEXT DEFAULT '0',
+          last_filled_qty TEXT,
+          last_filled_price TEXT,
+          quote_qty TEXT,
+          commission TEXT DEFAULT '0',
+          commission_asset TEXT,
+          realized_pnl TEXT DEFAULT '0',
+          reduce_only INTEGER DEFAULT 0,
+          close_position INTEGER DEFAULT 0,
+          is_maker INTEGER DEFAULT 0,
+          trade_id INTEGER,
+          order_time INTEGER NOT NULL,
+          update_time INTEGER NOT NULL,
+          source TEXT DEFAULT 'websocket',
+          created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
+          funding_rate_at_entry TEXT,
+          UNIQUE(symbol, order_id)
+        )
+      `);
+
+      // 2. Copy deduplicated data — prefer websocket source, keep latest update_time
+      this.db.exec(`
+        INSERT INTO trade_history_new (
+          symbol, order_id, client_order_id, side, position_side,
+          order_type, orig_type, status, price, avg_price,
+          orig_qty, executed_qty, last_filled_qty, last_filled_price,
+          quote_qty, commission, commission_asset, realized_pnl,
+          reduce_only, close_position, is_maker, trade_id,
+          order_time, update_time, source, created_at, funding_rate_at_entry
+        )
+        SELECT 
+          symbol, order_id, client_order_id, side, position_side,
+          order_type, orig_type, status, price, avg_price,
+          orig_qty, executed_qty, last_filled_qty, last_filled_price,
+          quote_qty, commission, commission_asset, realized_pnl,
+          reduce_only, close_position, is_maker, trade_id,
+          order_time, MAX(update_time), 
+          CASE WHEN SUM(CASE WHEN source = 'websocket' THEN 1 ELSE 0 END) > 0 THEN 'websocket' ELSE 'api_backfill' END,
+          MIN(created_at), funding_rate_at_entry
+        FROM trade_history
+        GROUP BY symbol, order_id
+      `);
+
+      // Count deduplication results
+      const oldCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM trade_history').get() as { cnt: number }).cnt;
+      const newCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM trade_history_new').get() as { cnt: number }).cnt;
+
+      // 3. Swap tables
+      this.db.exec('DROP TABLE trade_history');
+      this.db.exec('ALTER TABLE trade_history_new RENAME TO trade_history');
+
+      // 4. Recreate indexes
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_trade_history_symbol ON trade_history(symbol);
+        CREATE INDEX IF NOT EXISTS idx_trade_history_update_time ON trade_history(update_time);
+        CREATE INDEX IF NOT EXISTS idx_trade_history_status ON trade_history(status);
+        CREATE INDEX IF NOT EXISTS idx_trade_history_order_id ON trade_history(order_id);
+        CREATE INDEX IF NOT EXISTS idx_trade_history_symbol_time ON trade_history(symbol, update_time);
+      `);
+
+      console.log(`[TradeHistoryDb] Migration complete: ${oldCount} → ${newCount} records (${oldCount - newCount} duplicates removed)`);
+    });
+
+    transaction();
   }
 
   /**
@@ -182,18 +285,20 @@ class TradeHistoryDb {
         ?, ?, ?, ?,
         ?, ?, ?
       )
-      ON CONFLICT(symbol, order_id, update_time) DO UPDATE SET
+      ON CONFLICT(symbol, order_id) DO UPDATE SET
         status = excluded.status,
-        avg_price = excluded.avg_price,
+        avg_price = CASE WHEN excluded.avg_price != '0' THEN excluded.avg_price ELSE trade_history.avg_price END,
         executed_qty = excluded.executed_qty,
-        last_filled_qty = excluded.last_filled_qty,
-        last_filled_price = excluded.last_filled_price,
-        quote_qty = excluded.quote_qty,
-        commission = excluded.commission,
-        commission_asset = excluded.commission_asset,
-        realized_pnl = excluded.realized_pnl,
+        last_filled_qty = COALESCE(excluded.last_filled_qty, trade_history.last_filled_qty),
+        last_filled_price = COALESCE(excluded.last_filled_price, trade_history.last_filled_price),
+        quote_qty = COALESCE(excluded.quote_qty, trade_history.quote_qty),
+        commission = CASE WHEN excluded.commission != '0' THEN excluded.commission ELSE trade_history.commission END,
+        commission_asset = COALESCE(excluded.commission_asset, trade_history.commission_asset),
+        realized_pnl = CASE WHEN excluded.realized_pnl != '0' THEN excluded.realized_pnl ELSE trade_history.realized_pnl END,
         is_maker = excluded.is_maker,
-        trade_id = excluded.trade_id
+        trade_id = COALESCE(excluded.trade_id, trade_history.trade_id),
+        update_time = MAX(excluded.update_time, trade_history.update_time),
+        source = CASE WHEN excluded.source = 'websocket' THEN 'websocket' ELSE trade_history.source END
     `);
 
     stmt.run(

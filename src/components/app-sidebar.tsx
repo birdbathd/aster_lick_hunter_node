@@ -59,6 +59,11 @@ const navigation = [
     href: "/discovery",
   },
   {
+    title: "Analytics",
+    icon: Activity,
+    href: "/analytics",
+  },
+  {
     title: "Tranches",
     icon: Layers,
     href: "/tranches",

@@ -29,6 +29,9 @@ export interface Position {
   leverage: number;
   hasStopLoss?: boolean;
   hasTakeProfit?: boolean;
+  tpType?: string;
+  tpActivatePrice?: number;
+  tpPriceRate?: number;
   liquidationPrice?: number;
 }
 

@@ -105,12 +105,14 @@ export const GET = withAuth(async (request: NextRequest, _user) => {
           ((side === 'LONG' && order.side === 'SELL') || (side === 'SHORT' && order.side === 'BUY'))
         );
 
-        const hasTakeProfit = openOrders.some(order =>
+        const tpOrder = openOrders.find(order =>
           order.symbol === pos.symbol &&
           (order.type === 'TAKE_PROFIT_MARKET' || order.type === 'TAKE_PROFIT' ||
+           order.type === 'TRAILING_STOP_MARKET' ||
            (order.type === 'LIMIT' && order.reduceOnly === true)) &&
           ((side === 'LONG' && order.side === 'SELL') || (side === 'SHORT' && order.side === 'BUY'))
         );
+        const hasTakeProfit = !!tpOrder;
 
         return {
           symbol: pos.symbol,
@@ -125,6 +127,9 @@ export const GET = withAuth(async (request: NextRequest, _user) => {
           liquidationPrice: pos.liquidationPrice ? parseFloat(pos.liquidationPrice) : undefined,
           hasStopLoss,
           hasTakeProfit,
+          tpType: tpOrder?.type,
+          tpActivatePrice: tpOrder?.activatePrice ? parseFloat(tpOrder.activatePrice) : undefined,
+          tpPriceRate: tpOrder?.priceRate ? parseFloat(tpOrder.priceRate) : undefined,
         };
       });
 

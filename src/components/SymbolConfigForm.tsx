@@ -32,6 +32,7 @@ import {
   ArrowUpDown,
   Heart,
   Gauge,
+  Activity,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { TrancheSettingsSection } from './TrancheSettingsSection';
@@ -1851,6 +1852,171 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                     : ''}
                 </AlertDescription>
               </Alert>
+            </CardContent>
+          </Card>
+
+          {/* Adaptive Thresholds Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Adaptive Thresholds
+              </CardTitle>
+              <CardDescription>
+                Automatically adjust liquidation volume thresholds based on recent market activity. When enabled, thresholds adapt to target a specific percentile of recent liquidation volumes — higher percentile means only responding to larger events.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Enable Adaptive Thresholds</Label>
+                  <p className="text-xs text-muted-foreground">Adjusts thresholds within bounds around your configured values</p>
+                </div>
+                <Switch
+                  checked={config.global.adaptiveThresholds?.enabled === true}
+                  onCheckedChange={(checked) =>
+                    handleGlobalChange('adaptiveThresholds', {
+                      ...config.global.adaptiveThresholds,
+                      enabled: checked,
+                    })
+                  }
+                />
+              </div>
+
+              {config.global.adaptiveThresholds?.enabled && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="targetPercentile">Target Percentile</Label>
+                      <NumberInput
+                        id="targetPercentile"
+                        value={config.global.adaptiveThresholds?.targetPercentile ?? 80}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            targetPercentile: typeof value === 'number' ? Math.max(50, Math.min(99, value)) : 80,
+                          })
+                        }
+                        defaultValue={80}
+                        className="w-24"
+                        min="50"
+                        max="99"
+                        step="5"
+                      />
+                      <p className="text-xs text-muted-foreground">P80 = trigger on top 20% of liquidations. Higher = stricter.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lookbackHours">Lookback Hours</Label>
+                      <NumberInput
+                        id="lookbackHours"
+                        value={config.global.adaptiveThresholds?.lookbackHours ?? 24}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            lookbackHours: typeof value === 'number' ? Math.max(1, Math.min(168, value)) : 24,
+                          })
+                        }
+                        defaultValue={24}
+                        className="w-24"
+                        min="1"
+                        max="168"
+                        step="1"
+                      />
+                      <p className="text-xs text-muted-foreground">Hours of data to analyze (1-168)</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="updateInterval">Update Interval (min)</Label>
+                      <NumberInput
+                        id="updateInterval"
+                        value={config.global.adaptiveThresholds?.updateIntervalMinutes ?? 15}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            updateIntervalMinutes: typeof value === 'number' ? Math.max(5, Math.min(60, value)) : 15,
+                          })
+                        }
+                        defaultValue={15}
+                        className="w-24"
+                        min="5"
+                        max="60"
+                        step="5"
+                      />
+                      <p className="text-xs text-muted-foreground">Minutes between recalculations</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="smoothingFactor">Smoothing Factor</Label>
+                      <NumberInput
+                        id="smoothingFactor"
+                        value={config.global.adaptiveThresholds?.smoothingFactor ?? 0.3}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            smoothingFactor: typeof value === 'number' ? Math.max(0.1, Math.min(1.0, value)) : 0.3,
+                          })
+                        }
+                        defaultValue={0.3}
+                        className="w-24"
+                        min="0.1"
+                        max="1"
+                        step="0.1"
+                      />
+                      <p className="text-xs text-muted-foreground">Lower = smoother changes (0.1-1.0)</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="maxAdjustmentPercent">Max Adjustment %</Label>
+                      <NumberInput
+                        id="maxAdjustmentPercent"
+                        value={config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            maxAdjustmentPercent: typeof value === 'number' ? Math.max(10, Math.min(200, value)) : 50,
+                          })
+                        }
+                        defaultValue={50}
+                        className="w-24"
+                        min="10"
+                        max="200"
+                        step="10"
+                      />
+                      <p className="text-xs text-muted-foreground">Max % deviation from your static config value</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="minSamples">Min Samples</Label>
+                      <NumberInput
+                        id="minSamples"
+                        value={config.global.adaptiveThresholds?.minSamples ?? 20}
+                        onChange={(value) =>
+                          handleGlobalChange('adaptiveThresholds', {
+                            ...config.global.adaptiveThresholds,
+                            minSamples: typeof value === 'number' ? Math.max(1, value) : 20,
+                          })
+                        }
+                        defaultValue={20}
+                        className="w-24"
+                        min="1"
+                        step="5"
+                      />
+                      <p className="text-xs text-muted-foreground">Minimum liquidations before adapting (below = use static)</p>
+                    </div>
+                  </div>
+
+                  <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                    <AlertDescription className="text-xs">
+                      📊 Thresholds adapt within ±{config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50}% of your per-symbol config values.
+                      Uses the p{config.global.adaptiveThresholds?.targetPercentile ?? 80} of liquidation volumes from the last {config.global.adaptiveThresholds?.lookbackHours ?? 24}h.
+                      If there aren&apos;t enough samples ({config.global.adaptiveThresholds?.minSamples ?? 20}+), static config values are used.
+                      View live threshold adjustments on the Analytics page.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -25,7 +25,6 @@ import PerformanceCardInline from '@/components/PerformanceCardInline';
 import SessionPerformanceCard from '@/components/SessionPerformanceCard';
 import TradeQualityPanel from '@/components/TradeQualityPanel';
 import RecentOrdersTable from '@/components/RecentOrdersTable';
-import SymbolLeaderboard from '@/components/SymbolLeaderboard';
 import RiskModeSelector from '@/components/RiskModeSelector';
 import { TradeSizeWarningModal } from '@/components/TradeSizeWarningModal';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -339,7 +338,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Balance</span>
+                <span className="text-xs text-muted-foreground">Wallet</span>
                 <div className="flex items-center gap-2">
                   {isLoading ? (
                     <Skeleton className="h-5 w-20" />
@@ -511,9 +510,6 @@ export default function DashboardPage() {
 
           {/* Trade Quality Analysis Panel */}
           <TradeQualityPanel isPassiveMode={config?.global?.useTradeQualityScoring === false} />
-
-          {/* Per-symbol today leaderboard */}
-          <SymbolLeaderboard />
 
           {/* Positions Table */}
           <PositionTable

@@ -115,19 +115,20 @@ export class BalanceService extends EventEmitter {
         const accountData = await getAccountInfo(this.credentials!);
 
         if (accountData) {
-          // availableBalance is the free balance available for trading
+          // totalWalletBalance = deposited funds + accumulated realized PnL.
+          // This is the stable "true" balance — unaffected by open positions or open orders.
+          const walletBalance = parseFloat(accountData.totalWalletBalance || accountData.totalBalance || '0');
+          // availableBalance = walletBalance minus margin locked by positions AND open orders (SL/TP etc.)
           const availableBalance = parseFloat(accountData.availableBalance || '0');
           // totalUnrealizedProfit is the sum of all unrealized PnL
           const totalPnL = parseFloat(accountData.totalUnrealizedProfit || '0');
-          // totalPositionInitialMargin is the total margin used in positions
+          // totalPositionInitialMargin is the margin locked by open positions
           const totalPositionMargin = parseFloat(accountData.totalPositionInitialMargin || '0');
-          // Total wallet balance = available + margin used
-          const totalBalance = availableBalance + totalPositionMargin;
 
           this.currentBalance = {
-            totalBalance,
+            totalBalance: walletBalance,   // Use walletBalance — stable, ignores open orders
             availableBalance,
-            totalPositionValue: totalPositionMargin, // This is actually margin, not notional value
+            totalPositionValue: totalPositionMargin,
             totalPnL,
             lastUpdate: Date.now()
           };

@@ -158,14 +158,12 @@ export const GET = withAuth(async (request: NextRequest, _user) => {
       const accountData = await getAccountInfo(config.api);
 
       if (accountData) {
-        // Use pre-calculated USDT-equivalent totals from account endpoint
+        // totalWalletBalance = deposited funds + realized PnL — stable, unaffected by open orders
+        const totalBalance = parseFloat(accountData.totalWalletBalance || accountData.totalBalance || '0');
+        // availableBalance = walletBalance minus margin locked by all open positions AND open orders
         const availableBalance = parseFloat(accountData.availableBalance || '0');
         const totalPnL = parseFloat(accountData.totalUnrealizedProfit || '0');
         const totalPositionMargin = parseFloat(accountData.totalPositionInitialMargin || '0');
-
-        // Total balance = margin used in positions + available balance
-        // This represents your total trading equity/buying power
-        const totalBalance = totalPositionMargin + availableBalance;
 
 
         const response = {

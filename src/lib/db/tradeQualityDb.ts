@@ -420,6 +420,76 @@ class TradeQualityDatabase {
     };
   }
 
+  // Score performance breakdown — joins mae_mfe_records with quality scores
+  // Returns per-score stats for the S/V/R performance visual
+  getScoreBreakdown(): {
+    score: number;
+    label: string;
+    trades: number;
+    winRate: number;
+    avgPnlPct: number;
+    avgMaePct: number;
+    avgMfePct: number;
+    mfeMaeRatio: number;
+    signalCount: number;
+    executedCount: number;
+    skippedCount: number;
+  }[] {
+    const db = this.getDb();
+
+    // Mae/MFE stats grouped by quality_score
+    const outcomeRows = db.prepare(`
+      SELECT
+        quality_score,
+        COUNT(*) as trades,
+        ROUND(100.0 * SUM(is_winner) / COUNT(*), 1) as win_rate,
+        ROUND(AVG(pnl_percent), 3) as avg_pnl,
+        ROUND(AVG(mae_percent), 3) as avg_mae,
+        ROUND(AVG(mfe_percent), 3) as avg_mfe
+      FROM mae_mfe_records
+      WHERE quality_score IS NOT NULL
+      GROUP BY quality_score
+      ORDER BY quality_score DESC
+    `).all() as any[];
+
+    // Signal counts per score (all time)
+    const signalRows = db.prepare(`
+      SELECT
+        total_score,
+        COUNT(*) as total,
+        SUM(was_executed) as executed,
+        SUM(was_blocked) as blocked
+      FROM trade_quality_signals
+      GROUP BY total_score
+      ORDER BY total_score DESC
+    `).all() as any[];
+
+    const signalMap: Record<number, { total: number; executed: number; blocked: number }> = {};
+    signalRows.forEach((r: any) => {
+      signalMap[r.total_score] = { total: r.total, executed: r.executed, blocked: r.blocked };
+    });
+
+    const labels: Record<number, string> = { 3: 'STRONG', 2: 'NORMAL', 1: 'WEAK', 0: 'SKIP' };
+
+    return outcomeRows.map((r: any) => {
+      const sig = signalMap[r.quality_score] || { total: 0, executed: 0, blocked: 0 };
+      const mfeMaeRatio = r.avg_mae > 0 ? Math.round((r.avg_mfe / r.avg_mae) * 100) / 100 : 0;
+      return {
+        score: r.quality_score,
+        label: labels[r.quality_score] ?? `S${r.quality_score}`,
+        trades: r.trades,
+        winRate: r.win_rate,
+        avgPnlPct: r.avg_pnl,
+        avgMaePct: r.avg_mae,
+        avgMfePct: r.avg_mfe,
+        mfeMaeRatio,
+        signalCount: sig.total,
+        executedCount: sig.executed,
+        skippedCount: sig.blocked,
+      };
+    });
+  }
+
   // Cleanup old records
   cleanup(retentionDays: number = 30): number {
     const db = this.getDb();

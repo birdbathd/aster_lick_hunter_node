@@ -16,6 +16,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, stats });
     }
 
+    if (type === 'score-breakdown') {
+      const breakdown = tradeQualityDb.getScoreBreakdown();
+      return NextResponse.json({ success: true, breakdown });
+    }
+
     if (type === 'fta') {
       const signals = tradeQualityDb.getRecentFTASignals({ limit, symbol, since });
       return NextResponse.json({ success: true, signals });

@@ -146,6 +146,7 @@ export interface GlobalConfig {
   trailingTPCallback?: number;  // Callback % from peak profit to trigger close (default: 0.3)
   minEntrySpacingPercent?: number; // Minimum price spacing % between entries on same symbol/direction for DCA safety (default: 0.5)
   tradeSizeMultiplier?: number;     // Global trade size multiplier (0.1-5.0, default: 1.0). Applies to ALL symbols. Use for risk-on/risk-off scaling.
+  riskMode?: 'CONSERVATIVE' | 'NORMAL' | 'AGGRESSIVE' | 'MAX'; // Named preset. Sets tradeSizeMultiplier + maxOpenPositions. Conservative=0.5×/2, Normal=1×/3, Aggressive=1.5×/4, Max=2×/5.
   debugMode?: boolean;      // Enable verbose console logging for debugging (default: false)
   server?: ServerConfig;    // Optional server configuration
   rateLimit?: RateLimitConfig; // Rate limit configuration

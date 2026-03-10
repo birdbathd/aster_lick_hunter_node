@@ -77,6 +77,12 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedSignal, setExpandedSignal] = useState<number | null>(null);
   const [filter, setFilter] = useState<SignalFilter>('ALL');
+  const [showScoreStats, setShowScoreStats] = useState(false);
+  const [scoreBreakdown, setScoreBreakdown] = useState<{
+    score: number; label: string; trades: number; winRate: number;
+    avgPnlPct: number; avgMaePct: number; avgMfePct: number;
+    mfeMaeRatio: number; signalCount: number; executedCount: number;
+  }[]>([]);
 
   const handleMessage = useCallback((message: any) => {
     if (message.type === 'trade_opportunity') {
@@ -187,6 +193,15 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
               timestamp: s.timestamp
             }));
             setFtaAlerts(recentAlerts);
+          }
+        }
+
+        // Load score performance breakdown
+        const breakdownRes = await fetch('/api/trade-quality?type=score-breakdown');
+        if (breakdownRes.ok) {
+          const data = await breakdownRes.json();
+          if (data.success && data.breakdown) {
+            setScoreBreakdown(data.breakdown);
           }
         }
       } catch (error) {
@@ -333,7 +348,110 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                 {f} {f === 'TAKEN' ? `(${taken.length})` : f === 'SKIPPED' ? `(${skipped.length})` : `(${recentOpportunities.length})`}
               </Button>
             ))}
+            {scoreBreakdown.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 ml-auto text-muted-foreground"
+                onClick={() => setShowScoreStats(v => !v)}
+              >
+                <ArrowUpDown className="h-2.5 w-2.5 mr-1" />
+                {showScoreStats ? 'Hide' : 'Stats'}
+              </Button>
+            )}
           </div>
+
+          {/* Score Performance Breakdown */}
+          {showScoreStats && scoreBreakdown.length > 0 && (() => {
+            const maxPnl = Math.max(...scoreBreakdown.map(r => r.avgPnlPct));
+            const scoreColors: Record<string, string> = {
+              STRONG: 'text-green-400 bg-green-500/15 border-green-500/30',
+              NORMAL: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
+              WEAK: 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30',
+              SKIP: 'text-red-400 bg-red-500/15 border-red-500/30',
+            };
+            const barColors: Record<string, string> = {
+              STRONG: 'bg-green-500',
+              NORMAL: 'bg-blue-500',
+              WEAK: 'bg-yellow-500',
+              SKIP: 'bg-red-500',
+            };
+            return (
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                {/* Header */}
+                <div className="grid grid-cols-[56px_1fr_44px_44px_44px] gap-0 px-2 py-1 bg-muted/30 border-b border-border/40">
+                  <span className="text-[9px] text-muted-foreground font-medium">Score</span>
+                  <span className="text-[9px] text-muted-foreground font-medium">Avg PnL %</span>
+                  <span className="text-[9px] text-muted-foreground font-medium text-right">Win%</span>
+                  <span className="text-[9px] text-muted-foreground font-medium text-right">MFE/MAE</span>
+                  <span className="text-[9px] text-muted-foreground font-medium text-right">Signals</span>
+                </div>
+                {scoreBreakdown.map((row, i) => (
+                  <div
+                    key={row.score}
+                    className={cn(
+                      "grid grid-cols-[56px_1fr_44px_44px_44px] gap-0 px-2 py-1.5 items-center",
+                      i < scoreBreakdown.length - 1 && "border-b border-border/20"
+                    )}
+                  >
+                    {/* Score badge */}
+                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4 w-fit border font-mono", scoreColors[row.label])}>
+                      {row.score}/3
+                    </Badge>
+
+                    {/* PnL bar + value */}
+                    <div className="flex items-center gap-1.5 pr-2">
+                      <div className="flex-1 h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all", barColors[row.label])}
+                          style={{ width: maxPnl > 0 ? `${(row.avgPnlPct / maxPnl) * 100}%` : '0%' }}
+                        />
+                      </div>
+                      <span className={cn("text-[10px] font-mono tabular-nums whitespace-nowrap", row.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400')}>
+                        +{row.avgPnlPct.toFixed(2)}%
+                      </span>
+                    </div>
+
+                    {/* Win rate */}
+                    <span className={cn(
+                      "text-[10px] font-mono tabular-nums text-right",
+                      row.winRate >= 95 ? 'text-green-400' : row.winRate >= 80 ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {row.winRate.toFixed(0)}%
+                    </span>
+
+                    {/* MFE/MAE ratio */}
+                    <span className={cn(
+                      "text-[10px] font-mono tabular-nums text-right",
+                      row.mfeMaeRatio >= 1.2 ? 'text-green-400' : row.mfeMaeRatio >= 0.8 ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {row.mfeMaeRatio.toFixed(2)}
+                    </span>
+
+                    {/* Signal count */}
+                    <div className="text-right">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[10px] text-muted-foreground tabular-nums cursor-help">
+                            {row.signalCount.toLocaleString()}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                          <p className="font-semibold">{row.label} signals (all time)</p>
+                          <p>Executed: {row.executedCount}</p>
+                          <p>Skipped: {row.signalCount - row.executedCount}</p>
+                          <p>Closed trades with data: {row.trades}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+                <div className="px-2 py-1 bg-muted/20 border-t border-border/30">
+                  <p className="text-[9px] text-muted-foreground">MFE/MAE = reward-to-pain ratio of closed trades. &gt;1 = moved more in your favour than against.</p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Signal Feed */}
           <div className="max-h-[320px] overflow-y-auto space-y-1">

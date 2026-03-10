@@ -119,6 +119,7 @@ export const globalConfigSchema = z.object({
   maxShortPositions: z.number().min(0).optional(),
   minEntrySpacingPercent: z.number().min(0).optional(),
   tradeSizeMultiplier: z.number().min(0.1).max(5.0).optional(),
+  riskMode: z.enum(['CONSERVATIVE', 'NORMAL', 'AGGRESSIVE', 'MAX']).optional(),
   useThresholdSystem: z.boolean().optional(),
   useTradeQualityScoring: z.boolean().optional(),
   useFTAExitAnalysis: z.boolean().optional(),

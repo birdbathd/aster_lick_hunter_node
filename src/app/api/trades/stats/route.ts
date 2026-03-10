@@ -17,6 +17,19 @@ export async function GET(request: NextRequest) {
     const symbol = searchParams.get('symbol') || undefined;
     const startTime = searchParams.get('startTime');
     const endTime = searchParams.get('endTime');
+    const leaderboard = searchParams.get('leaderboard');
+
+    // Per-symbol leaderboard mode
+    if (leaderboard) {
+      const start = startTime ? parseInt(startTime) : (() => {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return now.getTime();
+      })();
+      const end = endTime ? parseInt(endTime) : undefined;
+      const rows = tradeHistoryDb.getSymbolLeaderboard(start, end);
+      return NextResponse.json({ leaderboard: rows });
+    }
 
     const totalTrades = tradeHistoryDb.getTradeCount({ status: 'FILLED' });
     const symbolTrades = symbol ? tradeHistoryDb.getTradeCount({ symbol, status: 'FILLED' }) : totalTrades;

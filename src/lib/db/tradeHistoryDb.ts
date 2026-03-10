@@ -621,6 +621,49 @@ class TradeHistoryDb {
   }
 
   /**
+   * Per-symbol income breakdown within a time window (for leaderboard)
+   */
+  getSymbolLeaderboard(startTime: number, endTime?: number): Array<{
+    symbol: string;
+    realizedPnl: number;
+    commission: number;
+    funding: number;
+    netProfit: number;
+    tradeCount: number;
+  }> {
+    const params: any[] = [startTime];
+    const endClause = endTime ? 'AND time <= ?' : '';
+    if (endTime) params.push(endTime);
+
+    const rows = this.db.prepare(`
+      SELECT
+        symbol,
+        SUM(CASE WHEN income_type = 'REALIZED_PNL' THEN CAST(income AS REAL) ELSE 0 END) AS realized_pnl,
+        SUM(CASE WHEN income_type = 'COMMISSION' THEN CAST(income AS REAL) ELSE 0 END) AS commission,
+        SUM(CASE WHEN income_type = 'FUNDING_FEE' THEN CAST(income AS REAL) ELSE 0 END) AS funding,
+        COUNT(DISTINCT CASE WHEN income_type = 'REALIZED_PNL' THEN trade_id END) AS trade_count
+      FROM income_history
+      WHERE time >= ? ${endClause}
+        AND symbol IS NOT NULL AND symbol != ''
+      GROUP BY symbol
+      ORDER BY (
+        SUM(CASE WHEN income_type = 'REALIZED_PNL' THEN CAST(income AS REAL) ELSE 0 END) +
+        SUM(CASE WHEN income_type = 'COMMISSION' THEN CAST(income AS REAL) ELSE 0 END) +
+        SUM(CASE WHEN income_type = 'FUNDING_FEE' THEN CAST(income AS REAL) ELSE 0 END)
+      ) DESC
+    `).all(...params) as any[];
+
+    return rows.map(r => ({
+      symbol: r.symbol,
+      realizedPnl: r.realized_pnl ?? 0,
+      commission: r.commission ?? 0,
+      funding: r.funding ?? 0,
+      netProfit: (r.realized_pnl ?? 0) + (r.commission ?? 0) + (r.funding ?? 0),
+      tradeCount: r.trade_count ?? 0,
+    }));
+  }
+
+  /**
    * Get total trade count (for stats)
    */
   getTradeCount(filter?: { symbol?: string; status?: string }): number {

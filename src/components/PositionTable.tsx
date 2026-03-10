@@ -715,6 +715,17 @@ export default function PositionTable({
                 const hasVwapProtection = symbolConfig?.vwapProtection;
                 const isProtected = protectionStatus[`${position.symbol}_${position.side}`];
                 const mobileTrailingTP = trailingTPData[`${position.symbol}_${position.side}`];
+                const mobileActivatePrice = position.tpActivatePrice ?? 0;
+                const isMobileExchangeTrailActivated = position.tpType === 'TRAILING_STOP_MARKET'
+                  && position.markPrice > 0 && mobileActivatePrice > 0
+                  && (position.side === 'LONG'
+                    ? position.markPrice >= mobileActivatePrice
+                    : position.markPrice <= mobileActivatePrice);
+                const liveExchangeTrailStopMobile = isMobileExchangeTrailActivated && position.tpPriceRate && position.markPrice
+                  ? position.side === 'LONG'
+                    ? position.markPrice * (1 - position.tpPriceRate / 100)
+                    : position.markPrice * (1 + position.tpPriceRate / 100)
+                  : null;
                 const mobileFundingRate = fundingRates[position.symbol];
                 const isMobileFundingAdverse = mobileFundingRate && (
                   (position.side === 'LONG' && mobileFundingRate.direction === 'longs_pay') ||
@@ -799,11 +810,17 @@ export default function PositionTable({
                       {position.hasTakeProfit ? (
                         <Badge variant="outline" className={`h-5 text-[10px] px-1.5 ${
                           position.tpType === 'TRAILING_STOP_MARKET'
-                            ? 'border-purple-600 text-purple-600'
+                            ? isMobileExchangeTrailActivated
+                              ? 'border-green-600 text-green-600 bg-green-600/10'
+                              : 'border-amber-500 text-amber-500'
                             : 'border-blue-600 text-blue-600'
                         }`}>
                           {position.tpType === 'TRAILING_STOP_MARKET' ? (
-                            <><Crosshair className="h-3 w-3 mr-0.5" />Trail TP</>
+                            <><Crosshair className={`h-3 w-3 mr-0.5 ${isMobileExchangeTrailActivated ? 'animate-pulse' : ''}`} />
+                              {isMobileExchangeTrailActivated
+                                ? liveExchangeTrailStopMobile ? `Stop:$${formatPrice(position.symbol, liveExchangeTrailStopMobile)}` : 'Trail🎯'
+                                : position.tpActivatePrice ? `Arm@$${formatPrice(position.symbol, position.tpActivatePrice)}` : 'Trail⏳'}
+                            </>
                           ) : (
                             <><Target className="h-3 w-3 mr-0.5" />TP</>
                           )}
@@ -836,7 +853,7 @@ export default function PositionTable({
                         </Badge>
                       )}
                       {!mobileTrailingTP && position.tpType === 'TRAILING_STOP_MARKET' && position.tpPriceRate && (
-                        <span className="text-[10px] text-purple-400 font-mono">
+                        <span className={`text-[10px] font-mono ${isMobileExchangeTrailActivated ? 'text-green-400' : 'text-amber-400'}`}>
                           CB:{position.tpPriceRate}%
                         </span>
                       )}
@@ -941,6 +958,17 @@ export default function PositionTable({
               const symbolConfig = config?.symbols?.[position.symbol];
               const hasVwapProtection = symbolConfig?.vwapProtection;
               const trailingTP = trailingTPData[`${position.symbol}_${position.side}`];
+              const desktopActivatePrice = position.tpActivatePrice ?? 0;
+              const isExchangeTrailActivated = position.tpType === 'TRAILING_STOP_MARKET'
+                && position.markPrice > 0 && desktopActivatePrice > 0
+                && (position.side === 'LONG'
+                  ? position.markPrice >= desktopActivatePrice
+                  : position.markPrice <= desktopActivatePrice);
+              const liveExchangeTrailStop = isExchangeTrailActivated && position.tpPriceRate && position.markPrice
+                ? position.side === 'LONG'
+                  ? position.markPrice * (1 - position.tpPriceRate / 100)
+                  : position.markPrice * (1 + position.tpPriceRate / 100)
+                : null;
               const fundingRate = fundingRates[position.symbol];
               const isFundingAdverse = fundingRate && (
                 (position.side === 'LONG' && fundingRate.direction === 'longs_pay') ||
@@ -1078,11 +1106,15 @@ export default function PositionTable({
                                 {position.hasTakeProfit ? (
                                   <Badge variant="outline" className={`h-5 w-5 p-0 ${
                                     position.tpType === 'TRAILING_STOP_MARKET'
-                                      ? 'border-purple-600'
+                                      ? isExchangeTrailActivated
+                                        ? 'border-green-600 bg-green-600/10'
+                                        : 'border-amber-500'
                                       : 'border-blue-600'
                                   }`}>
                                     {position.tpType === 'TRAILING_STOP_MARKET' ? (
-                                      <Crosshair className="h-3 w-3 text-purple-600" />
+                                      <Crosshair className={`h-3 w-3 ${
+                                        isExchangeTrailActivated ? 'text-green-600 animate-pulse' : 'text-amber-500'
+                                      }`} />
                                     ) : (
                                       <Target className="h-3 w-3 text-blue-600" />
                                     )}
@@ -1139,19 +1171,22 @@ export default function PositionTable({
                                 <p>Stop Loss: {position.hasStopLoss ? '✅ Active' : '❌ Inactive'}</p>
                                 <p>Take Profit: {position.hasTakeProfit
                                   ? position.tpType === 'TRAILING_STOP_MARKET'
-                                    ? '🎯 Trailing TP (Exchange)'
+                                    ? isExchangeTrailActivated ? '🎯 Trail TP — ACTIVE' : '⏳ Trail TP — Pending'
                                     : '✅ Active'
                                   : '❌ Inactive'}</p>
-                                {!trailingTP && position.tpType === 'TRAILING_STOP_MARKET' && (
+                                {position.tpType === 'TRAILING_STOP_MARKET' && (
                                   <>
-                                    <p className="font-medium text-purple-400">
-                                      Exchange Trailing Stop
+                                    <p className={`font-medium ${isExchangeTrailActivated ? 'text-green-400' : 'text-amber-400'}`}>
+                                      {isExchangeTrailActivated ? '🎯 Trail Active' : '⏳ Awaiting activation'}
                                     </p>
-                                    {position.tpActivatePrice && (
-                                      <p>Activation: ${formatPrice(position.symbol, position.tpActivatePrice)}</p>
+                                    {!isExchangeTrailActivated && position.tpActivatePrice && (
+                                      <p>Activates at: ${formatPrice(position.symbol, position.tpActivatePrice)}</p>
                                     )}
                                     {position.tpPriceRate && (
-                                      <p>Callback Rate: {position.tpPriceRate}%</p>
+                                      <p>Callback: {position.tpPriceRate}%</p>
+                                    )}
+                                    {liveExchangeTrailStop && (
+                                      <p className="text-green-300">Est. trail stop: ${formatPrice(position.symbol, liveExchangeTrailStop)}</p>
                                     )}
                                   </>
                                 )}

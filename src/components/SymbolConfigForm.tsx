@@ -2184,9 +2184,20 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                             min="1"
                             max="125"
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Trading leverage (1-125x)
-                          </p>
+                          {(() => {
+                            const lev = config.symbols[selectedSymbol].leverage ?? 1;
+                            if (lev >= 50) return (
+                              <p className="text-xs text-red-500 font-medium">⚠️ Very high leverage ({lev}×) — small price moves may trigger liquidation. Ensure tight SL.</p>
+                            );
+                            if (lev >= 20) return (
+                              <p className="text-xs text-amber-500">⚠️ High leverage ({lev}×) — consider a SL ≤ {(100/lev * 0.8).toFixed(1)}% to stay safe.</p>
+                            );
+                            return (
+                              <p className="text-xs text-muted-foreground">
+                                Trading leverage (1-125×). Liquidation ~{(100/lev).toFixed(1)}% adverse move.
+                              </p>
+                            );
+                          })()}
                         </div>
 
                         {/* Trade Size Configuration */}
@@ -2514,9 +2525,15 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                             min="0.1"
                             step="0.1"
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Stop loss percentage
-                          </p>
+                          {(() => {
+                            const sl = config.symbols[selectedSymbol].slPercent ?? 0;
+                            const lev = config.symbols[selectedSymbol].leverage ?? 1;
+                            const liquidAt = 100 / lev;
+                            if (sl <= 0) return <p className="text-xs text-amber-500">⚠️ No stop loss configured — unlimited downside risk.</p>;
+                            if (sl >= liquidAt * 0.8) return <p className="text-xs text-red-500 font-medium">⛔ SL ({sl}%) is ≥80% of liquidation distance ({liquidAt.toFixed(1)}%) — may not trigger in time.</p>;
+                            if (sl * lev > 30) return <p className="text-xs text-amber-500">⚠️ At {lev}×, a {sl}% SL means ~{(sl * lev).toFixed(0)}% margin loss per trade.</p>;
+                            return <p className="text-xs text-muted-foreground">Stop loss percentage (liquidates at ~{liquidAt.toFixed(1)}% at {lev}× leverage)</p>;
+                          })()}
                         </div>
 
                         <div className="space-y-2">

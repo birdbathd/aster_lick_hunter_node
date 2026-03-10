@@ -25,6 +25,8 @@ import PerformanceCardInline from '@/components/PerformanceCardInline';
 import SessionPerformanceCard from '@/components/SessionPerformanceCard';
 import TradeQualityPanel from '@/components/TradeQualityPanel';
 import RecentOrdersTable from '@/components/RecentOrdersTable';
+import SymbolLeaderboard from '@/components/SymbolLeaderboard';
+import RiskModeSelector from '@/components/RiskModeSelector';
 import { TradeSizeWarningModal } from '@/components/TradeSizeWarningModal';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { PaperTradingDashboard } from '@/components/PaperTradingDashboard';
@@ -466,32 +468,9 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Cascade Protection Status */}
-            {(() => {
-              const m = config?.global?.tradeSizeMultiplier ?? 1.0;
-              if (m === 1.0) return null;
-              const isHigh = m > 2.0;
-              const isRiskOn = m > 1.0;
-              return (
-                <>
-                  <div className="hidden sm:block w-px h-8 bg-border" />
-                  <div className="flex items-center gap-2">
-                    <Gauge className={`h-4 w-4 ${isHigh ? 'text-red-500' : isRiskOn ? 'text-yellow-500' : 'text-blue-500'}`} />
-                    <div className="flex flex-col">
-                      <span className="text-xs text-muted-foreground">Trade Size</span>
-                      <Badge
-                        variant={isHigh ? 'destructive' : 'secondary'}
-                        className={`h-5 text-[10px] px-2 ${
-                          isHigh ? 'animate-pulse' : isRiskOn ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        {isHigh ? '🔴' : isRiskOn ? '🟡' : '🔵'} {m}× {isHigh ? 'HIGH RISK' : isRiskOn ? 'RISK-ON' : 'RISK-OFF'}
-                      </Badge>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
+            {/* Risk Mode Selector */}
+            <div className="hidden sm:block w-px h-8 bg-border" />
+            <RiskModeSelector />
 
             {/* Cascade Protection Status */}
             {config?.global?.cascadeProtection?.enabled !== false && cascadeActive && (
@@ -532,6 +511,9 @@ export default function DashboardPage() {
 
           {/* Trade Quality Analysis Panel */}
           <TradeQualityPanel isPassiveMode={config?.global?.useTradeQualityScoring === false} />
+
+          {/* Per-symbol today leaderboard */}
+          <SymbolLeaderboard />
 
           {/* Positions Table */}
           <PositionTable

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import SymbolConfigForm from '@/components/SymbolConfigForm';
+import ConfigCompareView from '@/components/ConfigCompareView';
 import { useConfig } from '@/components/ConfigProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -109,6 +110,9 @@ export default function ConfigPage() {
             currentConfig={config}
           />
         )}
+
+        {/* Symbol comparison table */}
+        {config && <ConfigCompareView />}
 
         {/* Important Notes */}
         <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/20">

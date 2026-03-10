@@ -77,6 +77,30 @@ function debounce<T extends (...args: any[]) => any>(
   };
 }
 
+// Smart price formatter:
+// - Axis tick values are always clean numbers (0.70, 0.71) → naturally 2dp
+// - Crosshair passes exact OHLC price (0.70851) → show full meaningful precision
+// Rule: show decimal digits until we hit two consecutive zeros after finding
+// at least one significant digit; always at least 2dp.
+function smartPrice(price: number): string {
+  const s = price.toFixed(10);
+  const dec = s.split('.')[1] || '';
+  let keepDigits = 2;
+  let foundSignificant = false;
+  let consecutiveZeros = 0;
+  for (let i = 0; i < dec.length; i++) {
+    if (dec[i] !== '0') {
+      foundSignificant = true;
+      consecutiveZeros = 0;
+      keepDigits = i + 1;
+    } else {
+      consecutiveZeros++;
+      if (foundSignificant && consecutiveZeros >= 2) break;
+    }
+  }
+  return price.toFixed(Math.max(2, keepDigits));
+}
+
 // Convert timeframe to seconds for liquidation grouping
 function timeframeToSeconds(timeframe: string): number {
   const timeframes: Record<string, number> = {
@@ -155,6 +179,8 @@ export default function TradingViewChart({
   const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const isInitialLoadRef = useRef(true);
+  // Always-current latest mark price for trail stop calculation
+  const latestPriceRef = useRef<number>(0);
   
   // Refs to store refresh functions for auto-refresh
   const fetchKlineDataRef = useRef<(force?: boolean) => Promise<void>>();
@@ -230,6 +256,8 @@ export default function TradingViewChart({
 
   // Update position indicators
   const updatePositionIndicators = useCallback((positions: any[], orders: any[]) => {
+    // Use ref for latest price — always current, no stale-closure issues
+    const liveMarkPrice = latestPriceRef.current > 0 ? latestPriceRef.current : undefined;
     if (!candlestickSeriesRef.current) {
       return;
     }
@@ -301,31 +329,68 @@ export default function TradingViewChart({
         const isTrailingStop = order.type === 'TRAILING_STOP_MARKET';
 
         if (isTrailingStop) {
-          // Trailing stop market — show activation price and current trail stop
+          // Trailing stop market — show activation price and live trail stop
           const activatePrice = parseFloat(order.activatePrice || '0');
-          const trailStopPrice = parseFloat(order.stopPrice || '0');
+          const orderStopPrice = parseFloat(order.stopPrice || '0');
           const callbackRate = parseFloat(order.priceRate || '0');
+
+          // Get the live mark price from the matching position so the trail stop
+          // line follows current price rather than showing a stale snapshot.
+          // order.positionSide = 'LONG'/'SHORT' in HEDGE mode; fallback to
+          // inferring from order.side ('SELL' closes a LONG, 'BUY' closes a SHORT).
+          const orderPosSide = order.positionSide || (order.side === 'SELL' ? 'LONG' : 'SHORT');
+          const matchingPosition = symbolPositions.find(p =>
+            (p.side || p.positionSide || '').toUpperCase() === orderPosSide.toUpperCase()
+          );
+          // Prefer liveMarkPrice (from latest kline close) over position.markPrice which
+          // can be stale if the position hasn't been refreshed recently.
+          // liveMarkPrice (from latestPriceRef) = last kline close, always accurate
+          // fallback to position.markPrice only if ref not yet populated
+          const markPrice = (liveMarkPrice && liveMarkPrice > 0)
+            ? liveMarkPrice
+            : (matchingPosition ? parseFloat(matchingPosition.markPrice || matchingPosition.avgPrice || '0') : 0);
+
+          // Determine if trail has activated (price crossed the activation threshold)
+          const isLongTrail = orderPosSide === 'LONG';
+          const isActivated = activatePrice > 0 && markPrice > 0
+            ? (isLongTrail ? markPrice >= activatePrice : markPrice <= activatePrice)
+            : false;
+
+          // Compute live trail stop: once activated, the exchange tracks the
+          // high-watermark. Our best live estimate is max(exchangeStop, markPrice*(1-rate))
+          // for longs — we use max so we never show worse than the exchange's known stop.
+          let liveTrailStop = orderStopPrice;
+          if (isActivated && callbackRate > 0 && markPrice > 0) {
+            const liveEstimate = isLongTrail
+              ? markPrice * (1 - callbackRate / 100)
+              : markPrice * (1 + callbackRate / 100);
+            liveTrailStop = isLongTrail
+              ? Math.max(orderStopPrice, liveEstimate)
+              : Math.min(orderStopPrice, liveEstimate);
+          }
 
           if (activatePrice > 0) {
             const activationLine = candlestickSeriesRef.current!.createPriceLine({
               price: activatePrice,
-              color: '#a855f7', // Purple
+              color: isActivated ? '#22c55e' : '#a855f7', // Green when active, purple when pending
               lineWidth: 1,
               lineStyle: 2, // Dotted
               axisLabelVisible: true,
-              title: `Trail Arm: ${activatePrice}`,
+              title: isActivated ? `Trail Armed ✓` : `Trail Arm: ${activatePrice}`,
             });
             positionLinesRef.current.push(activationLine);
           }
 
-          if (trailStopPrice > 0) {
+          if (liveTrailStop > 0) {
             const trailLine = candlestickSeriesRef.current!.createPriceLine({
-              price: trailStopPrice,
-              color: '#a855f7', // Purple
+              price: liveTrailStop,
+              color: isActivated ? '#22c55e' : '#a855f7', // Green when active, purple when pending
               lineWidth: 2,
               lineStyle: 0, // Solid
               axisLabelVisible: true,
-              title: `Trail Stop: ${trailStopPrice} (${callbackRate}%)`,
+              title: isActivated
+                ? `Trail Stop: ${liveTrailStop.toFixed(liveTrailStop < 1 ? 5 : 2)} (-${callbackRate}% live)`
+                : `Trail Stop: ${liveTrailStop.toFixed(liveTrailStop < 1 ? 5 : 2)} (-${callbackRate}% cb)`,
             });
             positionLinesRef.current.push(trailLine);
           }
@@ -700,6 +765,9 @@ export default function TradingViewChart({
         crosshair: {
           mode: magnetMode ? 1 : 0, // 0 = normal, 1 = magnet to data points
         },
+        localization: {
+          priceFormatter: smartPrice,
+        },
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.5)',
         },
@@ -828,7 +896,18 @@ export default function TradingViewChart({
     }
   }, [klineData, hasUserInteracted]);
 
-  // Update position indicators when positions change or toggle changes
+  // Keep latestPriceRef in sync with klineData so updatePositionIndicators always
+  // has an accurate current price without needing it in the useCallback dep array
+  useEffect(() => {
+    if (klineData.length > 0) {
+      const last = klineData[klineData.length - 1];
+      if (last && last.close) {
+        latestPriceRef.current = last.close as number;
+      }
+    }
+  }, [klineData]);
+
+  // Update position indicators when positions/orders/kline changes
   useEffect(() => {
     if (!candlestickSeriesRef.current || !chartReady) return;
     if (showPositions && positions.length > 0) {
@@ -844,7 +923,8 @@ export default function TradingViewChart({
       });
       positionLinesRef.current = [];
     }
-  }, [positions, openOrders, showPositions, updatePositionIndicators, chartReady]);
+  // klineData as dep ensures trail stop redraws on every new candle close
+  }, [positions, openOrders, showPositions, updatePositionIndicators, chartReady, klineData]);
 
   // --- Recent orders overlay logic ---
   // Fetch from local trade history DB for deep history, with orderStore as real-time supplement

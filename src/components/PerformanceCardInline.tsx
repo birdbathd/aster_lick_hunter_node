@@ -144,10 +144,14 @@ export default function PerformanceCardInline() {
   const isProfit = totalPnL >= 0;
   const returnPercent = totalBalance > 0 ? (totalPnL / totalBalance) * 100 : 0;
 
+  // Daily target: 1% return. Bar fills from 0→1% goal; overflows shown at 100%.
+  const DAILY_TARGET_PCT = 1;
+  const barPct = Math.min(Math.abs(returnPercent) / DAILY_TARGET_PCT * 100, 100);
+
   return (
     <div className="flex items-center gap-2">
       <Clock className="h-4 w-4 text-muted-foreground" />
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted-foreground">24h</span>
           {totalTrades > 0 && (
@@ -184,6 +188,22 @@ export default function PerformanceCardInline() {
             <span>Fees: {formatCurrency(Math.abs(totalFees))}</span>
           </div>
         </div>
+        {/* Daily target progress bar (goal: 1% return) */}
+        <div className="relative h-1 w-full min-w-[120px] max-w-[200px] bg-muted rounded-full overflow-hidden" title={`Daily target: ${DAILY_TARGET_PCT}% return`}>
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              isProfit
+                ? barPct >= 100 ? 'bg-green-500' : 'bg-green-400/80'
+                : 'bg-red-500/80'
+            }`}
+            style={{ width: `${barPct}%` }}
+          />
+          {/* Goal marker at 100% (right edge) */}
+          <div className="absolute right-0 top-0 h-full w-px bg-muted-foreground/40" />
+        </div>
+        <span className="text-[9px] text-muted-foreground/60 leading-none">
+          {isProfit ? (barPct >= 100 ? `✓ ${DAILY_TARGET_PCT}% goal hit` : `${(barPct).toFixed(0)}% of ${DAILY_TARGET_PCT}% goal`) : 'below start'}
+        </span>
       </div>
     </div>
   );

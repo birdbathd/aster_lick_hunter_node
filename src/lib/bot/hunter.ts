@@ -1697,7 +1697,7 @@ logWarnWithTimestamp('Hunter: Cannot determine correct mode. Since we cannot ver
       // Only broadcast and emit if order was successfully placed
       if (order && order.orderId) {
         // Record DCA entry for guardrail tracking
-        if (isAddingToExisting) {
+        if (isAddingToExisting && this.positionTracker) {
           this.positionTracker.recordDCAEntry(symbol, side, this.isHedgeMode);
           const dcaCount = this.positionTracker.getDCAEntryCount(symbol, side, this.isHedgeMode);
           logWithTimestamp(`Hunter: Recorded DCA entry #${dcaCount} for ${symbol} ${side === 'BUY' ? 'LONG' : 'SHORT'}`);

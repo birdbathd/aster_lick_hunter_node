@@ -1001,7 +1001,7 @@ logWithTimestamp(`PositionManager: Order cancellation already in progress for ${
           // Clear protective orders for this position
           const protectiveService = getProtectiveOrderService();
           if (protectiveService) {
-            protectiveService.clearProtectiveOrders(symbol, position.positionSide);
+            protectiveService.clearProtectiveOrders(symbol, closedDirection);
           }
 
           // Trigger balance refresh after position closure

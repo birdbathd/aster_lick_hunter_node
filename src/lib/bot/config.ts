@@ -11,7 +11,9 @@ export async function loadConfig(): Promise<Config> {
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-  return await configLoader.saveConfig(config);
+  // Cast needed: Zod-inferred type adds `[k: string]: unknown` index signature
+  // that our hand-written GlobalConfig interface doesn't declare
+  return await configLoader.saveConfig(config as any);
 }
 
 // Re-export default config from the new module

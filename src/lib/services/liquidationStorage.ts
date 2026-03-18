@@ -649,6 +649,10 @@ export interface DiscoveryStats {
     count: number;
     volume: number;
     uniqueSymbols: number;
+    longCount: number;
+    shortCount: number;
+    longVolume: number;
+    shortVolume: number;
   };
   symbols: Array<{
     symbol: string;

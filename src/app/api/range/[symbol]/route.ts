@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getKlines } from '@/lib/api/market';
+import { Kline } from '@/lib/types';
 
 interface RangeAnalysis {
   symbol: string;
@@ -60,7 +61,7 @@ export async function GET(
     }
 
     // Current price from most recent candle
-    const currentPrice = parseFloat(klines5m[klines5m.length - 1][4]); // Close price
+    const currentPrice = parseFloat(klines5m[klines5m.length - 1].close); // Close price
 
     // Calculate ATR for different periods
     // ATR = Average of (High - Low) for each candle
@@ -133,13 +134,13 @@ export async function GET(
 
 // Calculate Average True Range from klines
 // Kline format: [openTime, open, high, low, close, volume, closeTime, ...]
-function calculateATR(klines: any[]): number {
+function calculateATR(klines: Kline[]): number {
   if (!klines?.length) return 0;
   
   let totalRange = 0;
   for (const kline of klines) {
-    const high = parseFloat(kline[2]);
-    const low = parseFloat(kline[3]);
+    const high = parseFloat(kline.high);
+    const low = parseFloat(kline.low);
     totalRange += (high - low);
   }
   
@@ -147,15 +148,15 @@ function calculateATR(klines: any[]): number {
 }
 
 // Calculate total range (highest high - lowest low)
-function calculateRange(klines: any[]): number {
+function calculateRange(klines: Kline[]): number {
   if (!klines?.length) return 0;
   
   let highestHigh = -Infinity;
   let lowestLow = Infinity;
   
   for (const kline of klines) {
-    const high = parseFloat(kline[2]);
-    const low = parseFloat(kline[3]);
+    const high = parseFloat(kline.high);
+    const low = parseFloat(kline.low);
     if (high > highestHigh) highestHigh = high;
     if (low < lowestLow) lowestLow = low;
   }

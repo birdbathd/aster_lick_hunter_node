@@ -524,6 +524,7 @@ class MAEService extends EventEmitter {
       
       try {
         const priceService = getPriceService();
+        if (!priceService) return;
         
         for (const position of Array.from(this.activePositions.values())) {
           const priceData = priceService.getMarkPrice(position.symbol);

@@ -191,7 +191,7 @@ logErrorWithTimestamp('❌ Config error:', error.message);
       if (!hasValidApiKeys && !this.config.global.paperMode) {
 logWithTimestamp('⚠️  No API keys configured - waiting for setup via web UI at http://localhost:3000/config');
         // Broadcast a simple status update (not an error) to the UI
-        this.statusBroadcaster._broadcast('waiting_for_config', {
+        this.statusBroadcaster.broadcast('waiting_for_config', {
           message: 'Please configure your API keys via the dashboard, or enable paper mode to test.',
           timestamp: new Date().toISOString(),
         });
@@ -285,7 +285,7 @@ logWithTimestamp('✅ Real-time price service started');
             this.statusBroadcaster.broadcast('mark_price_update', priceUpdates);
 
             // If in paper mode, update paper trading with real prices
-            if (this.config.global.paperMode) {
+            if (this.config!.global.paperMode) {
               const paperTrading = getPaperTradingManager();
               if (paperTrading.isActive()) {
                 for (const [symbol, price] of Object.entries(priceUpdates)) {
@@ -657,7 +657,7 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
                 quantity: event.quantity,
                 reduceOnly: true,
                 positionSide,
-              }, this.config.api);
+              }, this.config!.api);
 
               logWithTimestamp(
                 `✅ Tranche close order placed (${reason}): ${event.symbol} ${closeSide} qty=${event.quantity}`

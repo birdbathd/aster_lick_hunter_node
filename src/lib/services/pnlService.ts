@@ -122,6 +122,8 @@ class PnLService extends EventEmitter {
         realizedPnl: this.sessionPnL.realizedPnl,
         unrealizedPnl: this.sessionPnL.unrealizedPnl,
         totalPnl: this.sessionPnL.totalPnl,
+        commission: this.sessionPnL.commission,
+        fundingFee: this.sessionPnL.fundingFee,
       });
 
       this.emit('snapshot', this.getLatestSnapshot());

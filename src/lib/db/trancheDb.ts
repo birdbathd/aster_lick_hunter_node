@@ -353,7 +353,7 @@ export async function liquidateTranche(id: string, liquidationPrice: number): Pr
 // Log a tranche event
 export async function logTrancheEvent(
   trancheId: string,
-  eventType: 'created' | 'isolated' | 'closed' | 'liquidated' | 'updated',
+  eventType: 'created' | 'isolated' | 'closed' | 'liquidated' | 'updated' | 'tp_triggered' | 'max_loss_close' | 'time_expired',
   data: {
     price?: number;
     quantity?: number;

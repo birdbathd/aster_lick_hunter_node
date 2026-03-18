@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     }
 
     // Get real trades from API
-    const trades = await getAllOrders(symbol, config.api, undefined, undefined, limit);
+    const trades = await getAllOrders(symbol ?? '', config.api, undefined, undefined, limit);
 
     return NextResponse.json(trades || []);
   } catch (error: any) {

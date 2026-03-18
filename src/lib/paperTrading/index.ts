@@ -227,7 +227,7 @@ export class PaperTradingManager extends EventEmitter {
     this.stop();
     
     // Update balance
-    this.initialBalance = newBalance;
+    this.initialBalance = newBalance ?? this.initialBalance;
     this.isInitialized = false;
     
     // Reinitialize

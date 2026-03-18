@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useConfig } from '@/components/ConfigProvider';
 import orderStore from '@/lib/services/orderStore';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
+  import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, LineData } from 'lightweight-charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCachedKlines, setCachedKlines, updateCachedKlines, getCandlesFor7Days, prependHistoricalKlines } from '@/lib/klineCache';
@@ -183,11 +183,11 @@ export default function TradingViewChart({
   const latestPriceRef = useRef<number>(0);
   
   // Refs to store refresh functions for auto-refresh
-  const fetchKlineDataRef = useRef<(force?: boolean) => Promise<void>>();
-  const fetchLiquidationDataRef = useRef<() => Promise<void>>();
-  const fetchOpenOrdersRef = useRef<() => Promise<void>>();
+  const fetchKlineDataRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
+  const fetchLiquidationDataRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchOpenOrdersRef = useRef<(() => Promise<void>) | null>(null);
   const isLoadingHistoricalRef = useRef(false);
-  const loadHistoricalDataRef = useRef<() => Promise<void>>();
+  const loadHistoricalDataRef = useRef<(() => Promise<void>) | null>(null);
 
   // Combine props liquidations with database liquidations
   const allLiquidations = useMemo(() => 
@@ -1193,6 +1193,7 @@ export default function TradingViewChart({
           }
           
           // Create VWAP line series
+          if (!chartRef.current) return;
           vwapSeriesRef.current = chartRef.current.addLineSeries({
             color: '#ffa500',
             lineWidth: 1,
@@ -1205,7 +1206,7 @@ export default function TradingViewChart({
           const downsampledData = downsampleVWAP(vwapData.data, timeframe, vwapTimeframe);
           
           // Set VWAP data
-          vwapSeriesRef.current.setData(downsampledData);
+          vwapSeriesRef.current.setData(downsampledData as LineData<Time>[]);
         } else {
           console.warn('[TradingViewChart] No VWAP data returned for', symbol, vwapTimeframe, vwapData);
         }
@@ -1267,6 +1268,7 @@ export default function TradingViewChart({
           }
 
           // Create funding rate line series on a SEPARATE price scale (right side)
+          if (!chartRef.current) return;
           fundingRateSeriesRef.current = chartRef.current.addLineSeries({
             color: '#06b6d4', // cyan-500
             lineWidth: 2,
@@ -1310,7 +1312,7 @@ export default function TradingViewChart({
             .sort((a, b) => a[0] - b[0])
             .map(([time, value]) => ({ time, value }));
 
-          fundingRateSeriesRef.current.setData(lineData);
+          fundingRateSeriesRef.current.setData(lineData as LineData<Time>[]);
         }
       } catch (err) {
         console.warn('[TradingViewChart] Funding rate fetch error', err);

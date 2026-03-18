@@ -35,6 +35,7 @@ export function AddToPositionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notionalValue, setNotionalValue] = useState(0);
   const [marginRequired, setMarginRequired] = useState(0);
+  const [avgEntryAfterAdd, setAvgEntryAfterAdd] = useState<number | null>(null);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -43,17 +44,25 @@ export function AddToPositionModal({
       setQuantity('');
       setLimitPrice(currentPrice.toFixed(getPricePrecision(symbol)));
       setIsSubmitting(false);
+      setAvgEntryAfterAdd(null);
     }
   }, [isOpen, currentPrice, symbol]);
 
-  // Calculate notional value and margin required
+  // Calculate notional value, margin required and new average entry
   useEffect(() => {
     const qty = parseFloat(quantity) || 0;
     const price = orderType === 'MARKET' ? currentPrice : (parseFloat(limitPrice) || currentPrice);
     const notional = qty * price;
     setNotionalValue(notional);
     setMarginRequired(leverage > 0 ? notional / leverage : notional);
-  }, [quantity, limitPrice, orderType, currentPrice, leverage]);
+
+    if (qty > 0 && price > 0 && currentQuantity > 0 && entryPrice > 0) {
+      const newAvg = (currentQuantity * entryPrice + qty * price) / (currentQuantity + qty);
+      setAvgEntryAfterAdd(newAvg);
+    } else {
+      setAvgEntryAfterAdd(null);
+    }
+  }, [quantity, limitPrice, orderType, currentPrice, currentQuantity, entryPrice, leverage]);
 
   const getPricePrecision = (sym: string): number => {
     // Common price precisions
@@ -258,6 +267,25 @@ export function AddToPositionModal({
                 <span className="text-muted-foreground">Margin Required ({leverage}x):</span>
                 <span className="font-mono font-semibold">${marginRequired.toFixed(2)}</span>
               </div>
+              {avgEntryAfterAdd !== null && (
+                <div className="flex justify-between text-sm pt-1 border-t border-dashed">
+                  <span className="text-muted-foreground">New Avg Entry:</span>
+                  <span className="font-mono font-semibold">
+                    ${avgEntryAfterAdd.toFixed(getPricePrecision(symbol))}
+                    {' '}
+                    <span className={`text-xs ${
+                      // For longs: lower avg entry = better; for shorts: higher avg entry = better
+                      (side === 'LONG' ? avgEntryAfterAdd < entryPrice : avgEntryAfterAdd > entryPrice)
+                        ? 'text-green-500'
+                        : avgEntryAfterAdd === entryPrice
+                        ? 'text-muted-foreground'
+                        : 'text-yellow-500'
+                    }`}>
+                      ({avgEntryAfterAdd > entryPrice ? '+' : ''}{((avgEntryAfterAdd - entryPrice) / entryPrice * 100).toFixed(2)}%)
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

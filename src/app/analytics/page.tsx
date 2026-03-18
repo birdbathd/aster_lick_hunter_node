@@ -369,7 +369,7 @@ export default function AnalyticsPage() {
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground uppercase tracking-wider">Net P&L ({days}d)</div>
                   <div className={`text-2xl font-bold mt-1 ${totalNetPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {totalNetPnl >= 0 ? '+' : ''}${totalNetPnl.toFixed(2)}
+                    {totalNetPnl >= 0 ? '+' : '-'}${Math.abs(totalNetPnl).toFixed(2)}
                   </div>
                   <div className="text-xs text-muted-foreground">From closed positions</div>
                 </CardContent>
@@ -433,7 +433,7 @@ export default function AnalyticsPage() {
                             <TableCell className="text-right text-green-400">{w.wins}</TableCell>
                             <TableCell className="text-right text-red-400">{w.losses}</TableCell>
                             <TableCell className={`text-right font-mono font-medium ${w.netPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {w.netPnl >= 0 ? '+' : ''}${w.netPnl.toFixed(2)}
+                              {w.netPnl >= 0 ? '+' : '-'}${Math.abs(w.netPnl).toFixed(2)}
                             </TableCell>
                             <TableCell className="text-right font-mono">${w.avgWin.toFixed(2)}</TableCell>
                             <TableCell className="text-right font-mono">{w.avgLoss !== null ? `$${w.avgLoss.toFixed(2)}` : '—'}</TableCell>

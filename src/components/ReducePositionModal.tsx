@@ -123,7 +123,7 @@ export function ReducePositionModal({
             <div>
               <span className="text-muted-foreground">PnL:</span>
               <span className={`ml-2 font-semibold ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)} ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+                {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toFixed(2)} ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
               </span>
             </div>
           </div>
@@ -186,7 +186,7 @@ export function ReducePositionModal({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Est. realized PnL:</span>
                 <span className={`font-semibold ${reducePnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {reducePnl >= 0 ? '+' : ''}${Math.abs(reducePnl).toFixed(2)}
+                  {reducePnl >= 0 ? '+' : '-'}${Math.abs(reducePnl).toFixed(2)}
                 </span>
               </div>
             </div>

@@ -14,7 +14,8 @@ import {
   Target,
   ShieldAlert,
   Heart,
-  Gauge,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import MinimalBotStatus from '@/components/MinimalBotStatus';
 import LiquidationSidebar from '@/components/LiquidationSidebar';
@@ -26,6 +27,7 @@ import SessionPerformanceCard from '@/components/SessionPerformanceCard';
 import TradeQualityPanel from '@/components/TradeQualityPanel';
 import RecentOrdersTable from '@/components/RecentOrdersTable';
 import RiskModeSelector from '@/components/RiskModeSelector';
+import BalanceDetailPanel from '@/components/BalanceDetailPanel';
 import { TradeSizeWarningModal } from '@/components/TradeSizeWarningModal';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { PaperTradingDashboard } from '@/components/PaperTradingDashboard';
@@ -53,6 +55,7 @@ export default function DashboardPage() {
     totalPnL: 0,
   });
   const [balanceStatus, setBalanceStatus] = useState<BalanceStatus>({});
+  const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [positions, setPositions] = useState<Position[]>([]);
   const [markPrices, setMarkPrices] = useState<Record<string, number>>({});
@@ -62,6 +65,8 @@ export default function DashboardPage() {
   const [cascadeCooldown, setCascadeCooldown] = useState<number | null>(null);
   const [healthPaused, setHealthPaused] = useState(false);
   const [healthDrawdown, setHealthDrawdown] = useState(0);
+  const [healthBlockReason, setHealthBlockReason] = useState<string | null>(null);
+  const [healthUnrealizedLoss, setHealthUnrealizedLoss] = useState(0);
 
   // Initialize toast notifications
   useOrderNotifications();
@@ -165,6 +170,8 @@ export default function DashboardPage() {
         if (message.data) {
           setHealthPaused(message.data.isPaused || false);
           setHealthDrawdown(message.data.currentDrawdownPercent || 0);
+          setHealthBlockReason(message.data.blockReason || null);
+          setHealthUnrealizedLoss(message.data.unrealizedLossPercent || 0);
         }
       }
       // Forward all messages to data store for centralized handling
@@ -335,10 +342,19 @@ export default function DashboardPage() {
               {/* Account Summary - Minimal Design */}
               <div className="flex flex-wrap items-center gap-3">
             {/* Total Balance */}
-            <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setShowBalanceDetail(v => !v)}
+              title="Click to expand balance history"
+            >
               <Wallet className="h-4 w-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Wallet</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Wallet</span>
+                  {showBalanceDetail
+                    ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+                </div>
                 <div className="flex items-center gap-2">
                   {isLoading ? (
                     <Skeleton className="h-5 w-20" />
@@ -496,14 +512,21 @@ export default function DashboardPage() {
                   <Heart className="h-4 w-4 text-orange-500 animate-pulse" />
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">Account Health</span>
-                    <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse bg-orange-600">
-                      ⚠️ DRAWDOWN {healthDrawdown.toFixed(1)}% — New entries paused
+                    <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse bg-orange-600" title={healthBlockReason || undefined}>
+                      🚫 PAUSED
+                      {healthUnrealizedLoss > 0 && ` · PnL ${healthUnrealizedLoss.toFixed(1)}%`}
+                      {healthDrawdown > 0 && ` · DD ${healthDrawdown.toFixed(1)}%`}
                     </Badge>
                   </div>
                 </div>
               </>
             )}
           </div>
+
+          {/* Balance Detail Panel — expands when Wallet is clicked */}
+          {showBalanceDetail && (
+            <BalanceDetailPanel walletBalance={liveAccountInfo.totalBalance} />
+          )}
 
           {/* PnL Chart - Full Width */}
           <PnLChart />

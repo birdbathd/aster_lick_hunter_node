@@ -761,7 +761,7 @@ export default function PositionTable({
                     {/* PnL - Large and prominent */}
                     <div className="flex items-baseline gap-2">
                       <span className={`text-lg font-bold ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {position.pnl >= 0 ? '+' : ''}${Math.abs(position.pnl).toFixed(2)}
+                        {position.pnl >= 0 ? '+' : '-'}${Math.abs(position.pnl).toFixed(2)}
                       </span>
                       <Badge variant={position.pnl >= 0 ? "outline" : "destructive"} className={`h-4 text-[10px] ${position.pnl >= 0 ? 'border-green-600 text-green-600' : ''}`}>
                         {position.pnlPercent >= 0 ? '+' : ''}{(position.pnlPercent || 0).toFixed(1)}%
@@ -797,7 +797,7 @@ export default function PositionTable({
                     </div>
 
                     {/* Protection Status */}
-                    <div className="flex items-center gap-1 pt-1 border-t">
+                    <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
                       {position.hasStopLoss ? (
                         <Badge variant="outline" className="h-5 text-[10px] px-1.5 border-green-600 text-green-600">
                           <Shield className="h-3 w-3 mr-0.5" />SL
@@ -867,55 +867,59 @@ export default function PositionTable({
 
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex gap-2 pt-1">
-                      {onViewChart && (
+                    {/* Actions — split into two rows so nothing overflows on mobile */}
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <div className="flex gap-2">
+                        {onViewChart && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); onViewChart(position.symbol); }}
+                            className="h-8 w-8 p-0 shrink-0"
+                            title="View chart"
+                          >
+                            <LineChart className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant={isProtected ? "default" : "outline"}
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleProtectPosition(position); }}
+                          className={`flex-1 h-8 text-xs ${isProtected ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        >
+                          <Shield className="h-3 w-3 mr-1" />
+                          {isProtected ? 'Scaling' : 'Scale Out'}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={(e) => { e.stopPropagation(); onViewChart(position.symbol); }}
-                          className="h-8 w-8 p-0"
-                          title="View chart"
+                          onClick={(e) => { e.stopPropagation(); handleAddToPosition(position); }}
+                          className="flex-1 h-8 text-xs"
                         >
-                          <LineChart className="h-3.5 w-3.5" />
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add
                         </Button>
-                      )}
-                      <Button
-                        variant={isProtected ? "default" : "outline"}
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleProtectPosition(position); }}
-                        className={`flex-1 h-8 text-xs ${isProtected ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                      >
-                        <Shield className="h-3 w-3 mr-1" />
-                        {isProtected ? 'Scaling' : 'Scale Out'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleAddToPosition(position); }}
-                        className="flex-1 h-8 text-xs"
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleReducePosition(position); }}
-                        className="flex-1 h-8 text-xs text-orange-600 border-orange-600"
-                      >
-                        <Scissors className="h-3 w-3 mr-1" />
-                        Reduce
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleClosePosition(position); }}
-                        className="flex-1 h-8 text-xs"
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Close
-                      </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleReducePosition(position); }}
+                          className="flex-1 h-8 text-xs text-orange-600 border-orange-600"
+                        >
+                          <Scissors className="h-3 w-3 mr-1" />
+                          Reduce
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleClosePosition(position); }}
+                          className="flex-1 h-8 text-xs"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Close
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1077,7 +1081,7 @@ export default function PositionTable({
                   <TableCell className="text-right py-2">
                     <div className="flex flex-col items-end gap-0.5">
                       <span className={`text-sm font-semibold ${position.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {position.pnl >= 0 ? '+' : ''}${Math.abs(position.pnl).toFixed(2)}
+                        {position.pnl >= 0 ? '+' : '-'}${Math.abs(position.pnl).toFixed(2)}
                       </span>
                       <Badge
                         variant={position.pnl >= 0 ? "outline" : "destructive"}

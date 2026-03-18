@@ -141,7 +141,7 @@ export function PaperTradingDashboard() {
                   stats.unrealizedPnL >= 0 ? 'text-green-500' : 'text-red-500'
                 }`}
               >
-                {stats.unrealizedPnL >= 0 ? '+' : ''}${stats.unrealizedPnL.toFixed(2)}
+                {stats.unrealizedPnL >= 0 ? '+' : '-'}${Math.abs(stats.unrealizedPnL).toFixed(2)}
               </p>
             </div>
             <div>
@@ -151,7 +151,7 @@ export function PaperTradingDashboard() {
                   stats.realizedPnL >= 0 ? 'text-green-500' : 'text-red-500'
                 }`}
               >
-                {stats.realizedPnL >= 0 ? '+' : ''}${stats.realizedPnL.toFixed(2)}
+                {stats.realizedPnL >= 0 ? '+' : '-'}${Math.abs(stats.realizedPnL).toFixed(2)}
               </p>
             </div>
             <div>
@@ -203,8 +203,7 @@ export function PaperTradingDashboard() {
                     </div>
                     <div className="text-right">
                       <p className={`font-semibold ${pnlColor}`}>
-                        {position.unrealizedPnL >= 0 ? '+' : ''}$
-                        {position.unrealizedPnL.toFixed(2)}
+                        {position.unrealizedPnL >= 0 ? '+' : '-'}${Math.abs(position.unrealizedPnL).toFixed(2)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {position.unrealizedPnLPercent >= 0 ? '+' : ''}

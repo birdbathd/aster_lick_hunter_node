@@ -36,6 +36,11 @@ export const symbolConfigSchema = z.object({
 
   // Threshold system settings
   useThreshold: z.boolean().optional(),
+  thresholdTimeWindow: z.number().optional(),
+  thresholdCooldown: z.number().optional(),
+
+  // Order type override
+  forceMarketEntry: z.boolean().optional(),
 
   // Trailing Take Profit (per-symbol overrides)
   enableTrailingTP: z.boolean().optional(),

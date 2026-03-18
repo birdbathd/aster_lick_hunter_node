@@ -168,7 +168,7 @@ class AdaptiveThresholdService extends EventEmitter {
     } else {
       this.stopUpdateTimer();
       // Reset all to static values
-      for (const [symbol, state] of this.symbolStates) {
+      for (const [_symbol, state] of this.symbolStates) {
         state.effectiveLongThreshold = state.configLongThreshold;
         state.effectiveShortThreshold = state.configShortThreshold;
         state.isAdaptive = false;

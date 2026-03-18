@@ -1052,7 +1052,7 @@ logWithTimestamp(`PositionManager: Order cancellation already in progress for ${
         updateTime: event.E || Date.now(),
         source: 'websocket',
       });
-    } catch (err) {
+    } catch (_err) {
       // Non-critical — don't block order processing if DB write fails
     }
 
@@ -3103,14 +3103,14 @@ logWithTimestamp(`PositionManager: Closed position ${symbol} ${side}`);
   }
 
   // Handle trailing TP config changes on config reload
-  private async handleTrailingTPConfigChange(oldConfig: Config, newConfig: Config): Promise<void> {
+  private async handleTrailingTPConfigChange(oldConfig: Config, _newConfig: Config): Promise<void> {
     // Check all open positions — replace TP orders when trailing is toggled
     for (const position of this.currentPositions.values()) {
       const posAmt = parseFloat(position.positionAmt);
       if (Math.abs(posAmt) === 0) continue;
 
       const symbol = position.symbol;
-      const isLong = posAmt > 0;
+      const _isLong = posAmt > 0;
       const key = this.getPositionKey(symbol, position.positionSide, posAmt);
       const newTrailingConfig = this.getTrailingTPConfig(symbol);
 

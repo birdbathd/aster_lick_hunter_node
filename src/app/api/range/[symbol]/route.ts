@@ -47,7 +47,7 @@ export async function GET(
     const now = Date.now();
 
     // Fetch different timeframe klines in parallel
-    const [klines5m, klines1h, klines1d] = await Promise.all([
+    const [klines5m, klines1h, _klines1d] = await Promise.all([
       // Last 24 hours of 5m candles (288 candles)
       getKlines(upperSymbol, '5m', 288),
       // Last 7 days of 1h candles (168 candles)

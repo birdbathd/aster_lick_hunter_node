@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Table2, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Table2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { useConfig } from '@/components/ConfigProvider';
 
 const COLS = [

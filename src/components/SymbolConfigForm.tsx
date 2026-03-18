@@ -370,7 +370,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
     Object.keys(cleanedConfig.symbols).forEach(symbol => {
       if (!useSeparateTradeSizes[symbol]) {
         // Remove separate trade size fields when toggle is off
-        const { longTradeSize, shortTradeSize, ...restSymbolConfig } = cleanedConfig.symbols[symbol];
+        const { longTradeSize: _longTradeSize, shortTradeSize: _shortTradeSize, ...restSymbolConfig } = cleanedConfig.symbols[symbol];
         cleanedConfig.symbols[symbol] = restSymbolConfig;
       }
     });
@@ -825,7 +825,7 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
                               } else {
                                 toast.error('Failed to reset paper trading');
                               }
-                            } catch (error) {
+                            } catch (_error) {
                               toast.error('Error resetting paper trading');
                             }
                           }}

@@ -31,7 +31,7 @@ export async function GET() {
     // Fetch latest changes from remote for the current branch (ignore errors if branch doesn't exist remotely)
     try {
       await execAsync(`git fetch origin ${branch}`);
-    } catch (fetchError) {
+    } catch (_fetchError) {
       // Branch might not exist on remote yet, continue anyway
       console.log(`[Version Check] Branch ${branch} not found on remote, skipping fetch`);
     }

@@ -239,7 +239,7 @@ export class VirtualBalanceTracker extends EventEmitter {
         this.wins,
         this.losses,
       ]);
-    } catch (error: any) {
+    } catch (_error: any) {
       // Don't log on every update to avoid spam
       // logWithTimestamp(`⚠️ Failed to save balance to DB: ${error.message}`);
     }

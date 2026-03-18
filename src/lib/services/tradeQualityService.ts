@@ -195,7 +195,7 @@ export class TradeQualityService extends EventEmitter {
           this.trackPrice(symbol, price, timestamp);
           this.detectSpike(symbol, price, timestamp);
         }
-      } catch (error) {
+      } catch (_error) {
         // Ignore parse errors
       }
     });
@@ -445,8 +445,8 @@ export class TradeQualityService extends EventEmitter {
   calculateQualityScore(
     symbol: string,
     side: 'BUY' | 'SELL',
-    liquidationPrice: number,
-    liquidationVolume: number
+    _liquidationPrice: number,
+    _liquidationVolume: number
   ): TradeQualityScore {
     const now = Date.now();
     const reasons: string[] = [];
@@ -533,7 +533,7 @@ export class TradeQualityService extends EventEmitter {
     vwapCrossCount = crossesInLastHour.length;
     
     // Calculate time span for normalization
-    const hourInMs = 60 * 60 * 1000;
+    const _hourInMs = 60 * 60 * 1000;
     vwapCrossesPerHour = vwapCrossCount; // Already looking at 1 hour window
 
     if (vwapCrossesPerHour >= this.CHOPPY_THRESHOLD_CROSSES_PER_HOUR) {

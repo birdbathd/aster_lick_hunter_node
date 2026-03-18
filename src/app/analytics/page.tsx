@@ -162,7 +162,7 @@ function VolumeBar({ value, max, label, color = 'bg-blue-500' }: { value: number
 }
 
 // ─── Symbol Detail Card ──────────────────────────────────────────
-function SymbolCard({ sym, maxSignals }: { sym: SymbolAnalysis; maxSignals: number }) {
+function SymbolCard({ sym, maxSignals: _maxSignals }: { sym: SymbolAnalysis; maxSignals: number }) {
   const [expanded, setExpanded] = useState(false);
   const assessment = thresholdAssessment(sym);
   const rating = signalRating(sym.signalsPerDay);

@@ -13,7 +13,7 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isPasswordConfigured, setIsPasswordConfigured] = useState(true);
-  const router = useRouter();
+  const _router = useRouter();
 
   // Check if a custom password is configured (fetch from public endpoint)
   useEffect(() => {

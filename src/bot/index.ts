@@ -986,7 +986,7 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
             symbolConfig?.leverage || 1,
             data.qualityScore?.totalScore
           );
-        } catch (maeError) {
+        } catch (_maeError) {
           // Non-blocking - MAE tracking failure shouldn't affect trading
         }
 

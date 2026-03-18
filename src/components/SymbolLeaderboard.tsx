@@ -57,7 +57,7 @@ export default function SymbolLeaderboard() {
     <div className="rounded-lg border bg-card px-3 py-2">
       <div className="flex items-center gap-1.5 mb-1.5">
         <Trophy className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground">Today's Symbol Breakdown</span>
+        <span className="text-xs font-medium text-muted-foreground">Today&apos;s Symbol Breakdown</span>
         <Badge
           variant="outline"
           className={`ml-auto h-4 text-[10px] px-1.5 ${totalNet >= 0 ? 'border-green-600 text-green-600' : 'border-red-500 text-red-500'}`}

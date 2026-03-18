@@ -10,7 +10,7 @@ export async function GET() {
       ...state,
       cooldownRemaining: cascadeDetector.getCooldownRemaining(),
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { success: false, error: 'Failed to get cascade state' },
       { status: 500 }
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       { success: false, error: 'Unknown action. Use { "action": "clear" }' },
       { status: 400 }
     );
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { success: false, error: 'Failed to process cascade action' },
       { status: 500 }

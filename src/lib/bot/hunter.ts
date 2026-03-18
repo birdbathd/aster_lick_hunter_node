@@ -704,7 +704,7 @@ logErrorWithTimestamp('Hunter: Failed to initialize symbol precision manager:', 
     // This enables spike detection and volume trend analysis even before threshold is met
     try {
       tradeQualityService.recordLiquidation(liquidation, volumeUSDT);
-    } catch (e) {
+    } catch (_e) {
       // Non-critical, don't block trading
     }
 

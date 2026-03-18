@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Loader2, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
-import websocketService from '@/lib/services/websocketService';
 
 // Types
 interface LiquidationData {
@@ -154,7 +153,7 @@ export default function TradingViewChart({
   const positionLinesRef = useRef<any[]>([]);
   const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const fundingRateSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const orderMarkersRef = useRef<any[]>([]);
+  const _orderMarkersRef = useRef<any[]>([]);
 
   // State
   const [timeframe, setTimeframe] = useState('5m');
@@ -286,7 +285,7 @@ export default function TradingViewChart({
         const quantity = parseFloat(position.quantity || position.positionAmt || position.size || '0');
         const side = position.side; // "LONG" or "SHORT"
         const positionAmt = side === 'SHORT' ? -quantity : quantity; // Convert to signed amount
-        const unrealizedPnl = parseFloat(position.unrealizedProfit || position.pnl || '0');
+        const _unrealizedPnl = parseFloat(position.unrealizedProfit || position.pnl || '0');
         const liquidationPrice = parseFloat(position.liquidationPrice || '0');
         
         if (entryPrice > 0 && Math.abs(positionAmt) > 0) {
@@ -749,7 +748,7 @@ export default function TradingViewChart({
       return;
     }
 
-    const containerWidth = chartContainerRef.current.clientWidth;
+    const _containerWidth = chartContainerRef.current.clientWidth;
     
     try {
       const chart = createChart(chartContainerRef.current, {
@@ -1227,7 +1226,7 @@ export default function TradingViewChart({
           if (chartRef.current) {
             chartRef.current.removeSeries(vwapSeriesRef.current);
           }
-        } catch (err) {
+        } catch (_err) {
           // Chart may have been removed already, ignore
         }
         vwapSeriesRef.current = null;
@@ -1352,7 +1351,7 @@ export default function TradingViewChart({
           if (chartRef.current) {
             chartRef.current.removeSeries(fundingRateSeriesRef.current);
           }
-        } catch (err) {
+        } catch (_err) {
           // Chart may have been removed already, ignore
         }
         fundingRateSeriesRef.current = null;

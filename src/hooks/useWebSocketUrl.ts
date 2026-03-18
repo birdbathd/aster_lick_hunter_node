@@ -13,7 +13,7 @@ export function useWebSocketUrl() {
           console.warn('WebSocket port not configured, skipping connection');
           return;
         }
-        const useRemoteWebSocket = data.global?.server?.useRemoteWebSocket || false;
+        const _useRemoteWebSocket = data.global?.server?.useRemoteWebSocket || false;
         const configHost = data.global?.server?.websocketHost;
         const websocketPath = data.global?.server?.websocketPath;
 

@@ -63,7 +63,7 @@ export const GET = withAuth(async (request: Request, _user) => {
           range,
           recordCount: 1,
         });
-      } catch (error) {
+      } catch (_error) {
         // Paper trading not initialized yet, return empty data
         return NextResponse.json({
           dailyPnL: [],

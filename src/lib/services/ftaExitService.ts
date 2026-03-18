@@ -270,7 +270,7 @@ export class FTAExitService extends EventEmitter {
     const priceService = getPriceService();
     if (!priceService) return;
 
-    for (const [positionKey, position] of this.monitoredPositions.entries()) {
+    for (const [_positionKey, position] of this.monitoredPositions.entries()) {
       if (!position.isActive) continue;
 
       const markPriceData = priceService.getMarkPrice(position.symbol);

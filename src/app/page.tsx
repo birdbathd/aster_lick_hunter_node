@@ -339,206 +339,230 @@ export default function DashboardPage() {
                 <PaperTradingDashboard />
               )}
 
-              {/* Account Summary - Minimal Design */}
-              <div className="flex flex-wrap items-center gap-3">
-            {/* Total Balance */}
-            <div
-              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setShowBalanceDetail(v => !v)}
-              title="Click to expand balance history"
-            >
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">Wallet</span>
-                  {showBalanceDetail
-                    ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                    : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
-                </div>
-                <div className="flex items-center gap-2">
+              {/* Account Summary — Row 1: Financial Metric Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+
+                {/* Wallet */}
+                <div
+                  className="bg-card border rounded-lg px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => setShowBalanceDetail(v => !v)}
+                  title="Click to expand balance history"
+                >
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
+                    <Wallet className="h-3 w-3" />
+                    <span>Wallet</span>
+                    {showBalanceDetail
+                      ? <ChevronUp className="h-3 w-3 ml-auto" />
+                      : <ChevronDown className="h-3 w-3 ml-auto" />}
+                  </div>
                   {isLoading ? (
-                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-6 w-24 mt-0.5" />
                   ) : (
-                    <>
-                      <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalBalance)}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg font-semibold tabular-nums">{formatCurrency(liveAccountInfo.totalBalance)}</span>
                       {balanceStatus.error ? (
-                        <Badge variant="destructive" className="h-4 text-[10px] px-1">ERROR</Badge>
+                        <Badge variant="destructive" className="h-4 text-[10px] px-1">ERR</Badge>
                       ) : balanceStatus.source === 'websocket' ? (
                         <Badge variant="default" className="h-4 text-[10px] px-1 bg-green-600">LIVE</Badge>
                       ) : balanceStatus.source === 'rest-account' || balanceStatus.source === 'rest-balance' ? (
                         <Badge variant="secondary" className="h-4 text-[10px] px-1">REST</Badge>
                       ) : null}
-                    </>
+                    </div>
                   )}
                 </div>
-              </div>
-            </div>
 
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* Available Balance */}
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Available</span>
-                {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
-                ) : (
-                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.availableBalance)}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* Position Value */}
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-muted-foreground" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">In Position</span>
-                {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
-                ) : (
-                  <span className="text-lg font-semibold">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* Unrealized PnL */}
-            <div className="flex items-center gap-2">
-              {liveAccountInfo.totalPnL >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-600" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-600" />
-              )}
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Unrealized PnL</span>
-                {isLoading ? (
-                  <Skeleton className="h-5 w-20" />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-lg font-semibold ${
-                      liveAccountInfo.totalPnL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {formatCurrency(liveAccountInfo.totalPnL)}
-                    </span>
-                    <Badge
-                      variant={liveAccountInfo.totalPnL >= 0 ? "outline" : "destructive"}
-                      className={`h-4 text-[10px] px-1 ${
-                        liveAccountInfo.totalPnL >= 0
-                          ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
-                          : ''
-                      }`}
-                    >
-                      {liveAccountInfo.totalBalance > 0
-                        ? formatPercentage(liveAccountInfo.totalPnL / liveAccountInfo.totalBalance * 100)
-                        : '0.00%'
-                      }
-                    </Badge>
+                {/* Available */}
+                <div className="bg-card border rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
+                    <DollarSign className="h-3 w-3" />
+                    <span>Available</span>
                   </div>
-                )}
-              </div>
-            </div>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-24 mt-0.5" />
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg font-semibold tabular-nums">{formatCurrency(liveAccountInfo.availableBalance)}</span>
+                      {liveAccountInfo.totalBalance > 0 && (
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {((liveAccountInfo.availableBalance / liveAccountInfo.totalBalance) * 100).toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* 24h Performance - Inline */}
-            <PerformanceCardInline />
-
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* Live Session Performance */}
-            <SessionPerformanceCard />
-
-            <div className="hidden sm:block w-px h-8 bg-border" />
-
-            {/* Active Trading Symbols */}
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-muted-foreground" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Active Symbols</span>
-                <div className="flex items-center gap-1">
-                  {config?.symbols && Object.keys(config.symbols).length > 0 ? (
+                {/* In Position */}
+                <div className="bg-card border rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
+                    <Activity className="h-3 w-3" />
+                    <span>In Position</span>
+                  </div>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-24 mt-0.5" />
+                  ) : (
                     <>
-                      <span className="text-lg font-semibold">{Object.keys(config.symbols).length}</span>
-                      <div className="flex gap-1 max-w-[200px] overflow-hidden">
-                        {Object.keys(config.symbols).slice(0, 3).map((symbol, _index) => (
-                          <Badge key={symbol} variant="outline" className="h-4 text-[10px] px-1">
-                            {symbol.replace('USDT', '')}
-                          </Badge>
-                        ))}
-                        {Object.keys(config.symbols).length > 3 && (
-                          <Badge variant="outline" className="h-4 text-[10px] px-1">
-                            +{Object.keys(config.symbols).length - 3}
-                          </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-lg font-semibold tabular-nums">{formatCurrency(liveAccountInfo.totalPositionValue)}</span>
+                        {liveAccountInfo.totalBalance > 0 && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {((liveAccountInfo.totalPositionValue / liveAccountInfo.totalBalance) * 100).toFixed(0)}%
+                          </span>
                         )}
                       </div>
+                      {liveAccountInfo.totalBalance > 0 && (
+                        <div className="mt-1.5 h-1 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-500/60 transition-all duration-500"
+                            style={{ width: `${Math.min((liveAccountInfo.totalPositionValue / liveAccountInfo.totalBalance) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
                     </>
-                  ) : (
-                    <span className="text-lg font-semibold text-muted-foreground">0</span>
                   )}
                 </div>
+
+                {/* Unrealized PnL — color-coded card */}
+                <div className={`border rounded-lg px-3 py-2 transition-colors ${
+                  !isLoading && liveAccountInfo.totalPnL < 0
+                    ? 'bg-red-950/20 dark:bg-red-950/30 border-red-800/40'
+                    : !isLoading && liveAccountInfo.totalPnL > 0
+                      ? 'bg-green-950/20 dark:bg-green-950/30 border-green-800/40'
+                      : 'bg-card border-border'
+                }`}>
+                  <div className={`flex items-center gap-1 text-xs mb-0.5 ${
+                    !isLoading && liveAccountInfo.totalPnL < 0 ? 'text-red-400/80' : 'text-muted-foreground'
+                  }`}>
+                    {liveAccountInfo.totalPnL >= 0
+                      ? <TrendingUp className="h-3 w-3" />
+                      : <TrendingDown className="h-3 w-3" />}
+                    <span>Unrealized PnL</span>
+                  </div>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-24 mt-0.5" />
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-lg font-semibold tabular-nums ${
+                        liveAccountInfo.totalPnL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {formatCurrency(liveAccountInfo.totalPnL)}
+                      </span>
+                      <Badge
+                        variant={liveAccountInfo.totalPnL >= 0 ? "outline" : "destructive"}
+                        className={`h-4 text-[10px] px-1 ${
+                          liveAccountInfo.totalPnL >= 0
+                            ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
+                            : ''
+                        }`}
+                      >
+                        {liveAccountInfo.totalBalance > 0
+                          ? formatPercentage(liveAccountInfo.totalPnL / liveAccountInfo.totalBalance * 100)
+                          : '0.00%'}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
               </div>
-            </div>
 
-            {/* Risk Mode Selector */}
-            <div className="hidden sm:block w-px h-8 bg-border" />
-            <RiskModeSelector />
+              {/* Account Summary — Row 2: Performance & Operational Status */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
 
-            {/* Cascade Protection Status */}
-            {config?.global?.cascadeProtection?.enabled !== false && cascadeActive && (
-              <>
-                <div className="hidden sm:block w-px h-8 bg-border" />
+                {/* 24h Performance */}
+                <PerformanceCardInline />
+
+                <div className="hidden sm:block w-px h-6 bg-border" />
+
+                {/* Live Session Performance */}
+                <SessionPerformanceCard />
+
+                <div className="hidden sm:block w-px h-6 bg-border" />
+
+                {/* Active Trading Symbols */}
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-red-500 animate-pulse" />
+                  <Target className="h-4 w-4 text-muted-foreground" />
                   <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground">Cascade Protection</span>
-                    <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse">
-                      🚨 {config?.global?.cascadeProtection?.mode === 'BLOCK' ? 'PAUSED' : config?.global?.cascadeProtection?.mode === 'REDUCE' ? 'REDUCED' : 'DETECTED'}
-                      {cascadeCooldown && ` — ${Math.max(0, Math.ceil((cascadeCooldown - Date.now()) / 60000))}m remaining`}
-                    </Badge>
+                    <span className="text-xs text-muted-foreground">Active Symbols</span>
+                    <div className="flex items-center gap-1">
+                      {config?.symbols && Object.keys(config.symbols).length > 0 ? (
+                        <>
+                          <span className="text-lg font-semibold">{Object.keys(config.symbols).length}</span>
+                          <div className="flex gap-1 max-w-[200px] overflow-hidden">
+                            {Object.keys(config.symbols).slice(0, 3).map((symbol) => (
+                              <Badge key={symbol} variant="outline" className="h-4 text-[10px] px-1">
+                                {symbol.replace('USDT', '')}
+                              </Badge>
+                            ))}
+                            {Object.keys(config.symbols).length > 3 && (
+                              <Badge variant="outline" className="h-4 text-[10px] px-1">
+                                +{Object.keys(config.symbols).length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-lg font-semibold text-muted-foreground">0</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </>
-            )}
 
-            {/* Account Health Status */}
-            {healthPaused && (
-              <>
-                <div className="hidden sm:block w-px h-8 bg-border" />
-                <div className="flex items-center gap-2">
-                  <Heart className="h-4 w-4 text-orange-500 animate-pulse" />
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground">Account Health</span>
-                    <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse bg-orange-600" title={healthBlockReason || undefined}>
-                      🚫 PAUSED
-                      {healthUnrealizedLoss > 0 && ` · PnL ${healthUnrealizedLoss.toFixed(1)}%`}
-                      {healthDrawdown > 0 && ` · DD ${healthDrawdown.toFixed(1)}%`}
-                    </Badge>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                {/* Risk Mode Selector */}
+                <div className="hidden sm:block w-px h-6 bg-border" />
+                <RiskModeSelector />
 
-          {/* Balance Detail Panel — expands when Wallet is clicked */}
-          {showBalanceDetail && (
-            <BalanceDetailPanel walletBalance={liveAccountInfo.totalBalance} />
-          )}
+                {/* Cascade Protection Status */}
+                {config?.global?.cascadeProtection?.enabled !== false && cascadeActive && (
+                  <>
+                    <div className="hidden sm:block w-px h-6 bg-border" />
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4 text-red-500 animate-pulse" />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Cascade</span>
+                        <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse">
+                          🚨 {config?.global?.cascadeProtection?.mode === 'BLOCK' ? 'PAUSED' : config?.global?.cascadeProtection?.mode === 'REDUCE' ? 'REDUCED' : 'DETECTED'}
+                          {cascadeCooldown && ` — ${Math.max(0, Math.ceil((cascadeCooldown - Date.now()) / 60000))}m`}
+                        </Badge>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Account Health Status */}
+                {healthPaused && (
+                  <>
+                    <div className="hidden sm:block w-px h-6 bg-border" />
+                    <div className="flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-orange-500 animate-pulse" />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Account Health</span>
+                        <Badge variant="destructive" className="h-5 text-[10px] px-2 animate-pulse bg-orange-600" title={healthBlockReason || undefined}>
+                          🚫 PAUSED
+                          {healthUnrealizedLoss > 0 && ` · PnL ${healthUnrealizedLoss.toFixed(1)}%`}
+                          {healthDrawdown > 0 && ` · DD ${healthDrawdown.toFixed(1)}%`}
+                        </Badge>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+              </div>
+
+              {/* Balance Detail Panel — expands when Wallet is clicked */}
+              {showBalanceDetail && (
+                <BalanceDetailPanel walletBalance={liveAccountInfo.totalBalance} />
+              )}
+
+          {/* Positions Table — first, most actionable */}
+          <PositionTable
+            onClosePosition={handleClosePosition}
+            onViewChart={setSelectedSymbol}
+          />
 
           {/* PnL Chart - Full Width */}
           <PnLChart />
 
           {/* Trade Quality Analysis Panel */}
           <TradeQualityPanel isPassiveMode={config?.global?.useTradeQualityScoring === false} />
-
-          {/* Positions Table */}
-          <PositionTable
-            onClosePosition={handleClosePosition}
-            onViewChart={setSelectedSymbol}
-          />
 
           {/* Trading Chart with Symbol Selector */}
           {config?.symbols && Object.keys(config.symbols).length > 0 && selectedSymbol && (

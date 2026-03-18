@@ -545,16 +545,15 @@ export default function PnLChart() {
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
           </button>
           {!isCollapsed && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => fetchPnLData(true)}
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Tabs value={chartType} onValueChange={(value) => setChartType(value as ChartType)}>
+                <TabsList className="h-7">
+                  <TabsTrigger value="daily" className="h-6 text-[11px] px-2">Daily</TabsTrigger>
+                  <TabsTrigger value="cumulative" className="h-6 text-[11px] px-2">Total</TabsTrigger>
+                  <TabsTrigger value="breakdown" className="h-6 text-[11px] px-2">Breakdown</TabsTrigger>
+                  <TabsTrigger value="symbols" className="h-6 text-[11px] px-2">Symbol</TabsTrigger>
+                </TabsList>
+              </Tabs>
               <span className="text-xs text-muted-foreground">Timeframe:</span>
               <Select value={timeRange} onValueChange={(value) => setTimeRange(value as TimeRange)}>
                 <SelectTrigger className="h-7 w-[70px] text-xs">
@@ -569,21 +568,18 @@ export default function PnLChart() {
                   <SelectItem value="all">All</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => fetchPnLData(true)}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
           )}
         </div>
-        {!isCollapsed && (
-          <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t">
-            <Tabs value={chartType} onValueChange={(value) => setChartType(value as ChartType)} className="w-full sm:w-auto">
-              <TabsList className="h-7 w-full sm:w-auto grid grid-cols-4 sm:inline-flex">
-                <TabsTrigger value="daily" className="h-6 text-[11px] px-2">Daily</TabsTrigger>
-                <TabsTrigger value="cumulative" className="h-6 text-[11px] px-2">Total</TabsTrigger>
-                <TabsTrigger value="breakdown" className="h-6 text-[11px] px-2">Breakdown</TabsTrigger>
-                <TabsTrigger value="symbols" className="h-6 text-[11px] px-2">Symbol</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        )}
       </CardHeader>
       {!isCollapsed && (
         <CardContent>

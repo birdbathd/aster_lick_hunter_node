@@ -556,1469 +556,584 @@ export default function SymbolConfigForm({ onSave, currentConfig }: SymbolConfig
           </Card>
         </TabsContent>
 
-        <TabsContent value="global" className="space-y-4">
+        <TabsContent value="global" className="space-y-3">
+
+          {/* ── 1. TRADING MODE ──────────────────────────────────────── */}
           <Card>
-            <CardHeader>
-              <CardTitle>Global Settings</CardTitle>
-              <CardDescription>
-                Risk management and trading mode configuration
-              </CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Shield className="h-4 w-4" />
+                Trading Mode
+              </CardTitle>
+              <CardDescription>Live vs simulation, position mode</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="riskPercent">Risk Percentage</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="riskPercent"
-                    value={config.global.riskPercent ?? ''}
-                    onChange={(value) => handleGlobalChange('riskPercent', value)}
-                    defaultValue={0}
-                    className="w-24"
-                    min="0.1"
-                    max="100"
-                    step="0.1"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    % of account balance at risk
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Maximum percentage of your account to risk across all positions
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  ⚠️ Not yet implemented - this setting is reserved for future use
-                </p>
-              </div>
-
-              <Separator />
-
+            <CardContent className="space-y-5">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="paperMode">Paper Mode</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Enable simulation mode for risk-free testing
-                  </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    ⚠️ Experimental - not thoroughly tested
-                  </p>
+                  <p className="text-xs text-muted-foreground">Simulation — no real orders placed</p>
+                  <p className="text-xs text-amber-500">⚠️ Experimental — not thoroughly tested</p>
                 </div>
-                <Switch
-                  id="paperMode"
-                  checked={config.global.paperMode}
-                  onCheckedChange={(checked) => handleGlobalChange('paperMode', checked)}
-                />
+                <Switch id="paperMode" checked={config.global.paperMode} onCheckedChange={(checked) => handleGlobalChange('paperMode', checked)} />
               </div>
 
               {config.global.paperMode && (
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-4">
-                  <p className="text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Paper mode is enabled - No real trades will be executed
-                  </p>
-                </div>
-              )}
-
-              {/* Paper Trading Configuration - appears directly below Paper Mode toggle */}
-              {config.global.paperMode && (
-                <div className="space-y-4 p-4 border border-blue-200 dark:border-blue-900 rounded-lg bg-blue-50/30 dark:bg-blue-950/10">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
+                <div className="space-y-4 pl-4 border-l-2 border-blue-500/30">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="startingBalance">Starting Balance (USDT)</Label>
-                      <div className="flex items-center space-x-4">
-                        <Input
-                          id="startingBalance"
-                          type="number"
-                          value={config.global.paperTrading?.startingBalance || 1000}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            handleGlobalChange('paperTrading', {
-                              ...config.global.paperTrading,
-                              startingBalance: isNaN(value) ? 1000 : Math.max(100, value)
-                            });
-                          }}
-                          className="w-32"
-                          min="100"
-                          max="1000000"
-                          step="100"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Initial virtual balance for paper trading
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Set this to match your real account balance for realistic testing (requires bot restart)
-                      </p>
+                      <Input id="startingBalance" type="number" value={config.global.paperTrading?.startingBalance || 1000} onChange={(e) => { const v = parseFloat(e.target.value); handleGlobalChange('paperTrading', { ...config.global.paperTrading, startingBalance: isNaN(v) ? 1000 : Math.max(100, v) }); }} className="w-32" min="100" />
+                      <p className="text-xs text-muted-foreground">Virtual balance to start with</p>
                     </div>
-
-                    <Separator className="bg-blue-200 dark:bg-blue-900" />
-
-                    <div className="space-y-2">
-                      <Label htmlFor="slippageBps">Simulated Slippage (Basis Points)</Label>
-                      <div className="flex items-center space-x-4">
-                        <Input
-                          id="slippageBps"
-                          type="number"
-                          value={config.global.paperTrading?.slippageBps || 0}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            handleGlobalChange('paperTrading', {
-                              ...config.global.paperTrading,
-                              slippageBps: isNaN(value) ? 0 : Math.max(0, Math.min(500, value))
-                            });
-                          }}
-                          className="w-32"
-                          min="0"
-                          max="500"
-                          step="1"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          {config.global.paperTrading?.slippageBps 
-                            ? `~${(config.global.paperTrading.slippageBps / 100).toFixed(2)}% slippage` 
-                            : 'No slippage simulation'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Simulates price slippage on order fills (10 bps = 0.1%, 50 bps = 0.5%). Recommended: 5-20 bps for realistic testing.
-                      </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="slippageBps">Simulated Slippage (bps)</Label>
+                      <Input id="slippageBps" type="number" value={config.global.paperTrading?.slippageBps || 0} onChange={(e) => { const v = parseFloat(e.target.value); handleGlobalChange('paperTrading', { ...config.global.paperTrading, slippageBps: isNaN(v) ? 0 : Math.max(0, Math.min(500, v)) }); }} className="w-32" min="0" max="500" />
+                      <p className="text-xs text-muted-foreground">10 bps = 0.1% — recommended: 5–20</p>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="latencyMs">Simulated Network Latency (ms)</Label>
-                      <div className="flex items-center space-x-4">
-                        <Input
-                          id="latencyMs"
-                          type="number"
-                          value={config.global.paperTrading?.latencyMs || 0}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value);
-                            handleGlobalChange('paperTrading', {
-                              ...config.global.paperTrading,
-                              latencyMs: isNaN(value) ? 0 : Math.max(0, Math.min(5000, value))
-                            });
-                          }}
-                          className="w-32"
-                          min="0"
-                          max="5000"
-                          step="10"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Delay before order execution
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Simulates network delay between order placement and fill. Recommended: 50-200ms for realistic testing.
-                      </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="latencyMs">Network Latency (ms)</Label>
+                      <Input id="latencyMs" type="number" value={config.global.paperTrading?.latencyMs || 0} onChange={(e) => { const v = parseInt(e.target.value); handleGlobalChange('paperTrading', { ...config.global.paperTrading, latencyMs: isNaN(v) ? 0 : Math.max(0, Math.min(5000, v)) }); }} className="w-32" min="0" max="5000" />
+                      <p className="text-xs text-muted-foreground">Delay before fill — recommended: 50–200</p>
                     </div>
-
-                    <Separator className="bg-blue-200 dark:bg-blue-900" />
-
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="partialFillPercent">Partial Fill Chance (%)</Label>
-                      <div className="flex items-center space-x-4">
-                        <Input
-                          id="partialFillPercent"
-                          type="number"
-                          value={config.global.paperTrading?.partialFillPercent || 0}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            handleGlobalChange('paperTrading', {
-                              ...config.global.paperTrading,
-                              partialFillPercent: isNaN(value) ? 0 : Math.max(0, Math.min(100, value))
-                            });
-                          }}
-                          className="w-32"
-                          min="0"
-                          max="100"
-                          step="1"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          % chance of partial order fills
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Probability that limit orders only partially fill. 0 = always full fills, 100 = always partial.
-                      </p>
+                      <Input id="partialFillPercent" type="number" value={config.global.paperTrading?.partialFillPercent || 0} onChange={(e) => { const v = parseFloat(e.target.value); handleGlobalChange('paperTrading', { ...config.global.paperTrading, partialFillPercent: isNaN(v) ? 0 : Math.max(0, Math.min(100, v)) }); }} className="w-32" min="0" max="100" />
+                      <p className="text-xs text-muted-foreground">% chance limit orders only partially fill</p>
                     </div>
-
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="rejectionRate">Order Rejection Rate (%)</Label>
-                      <div className="flex items-center space-x-4">
-                        <Input
-                          id="rejectionRate"
-                          type="number"
-                          value={config.global.paperTrading?.rejectionRate || 0}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            handleGlobalChange('paperTrading', {
-                              ...config.global.paperTrading,
-                              rejectionRate: isNaN(value) ? 0 : Math.max(0, Math.min(100, value))
-                            });
-                          }}
-                          className="w-32"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          % chance of order rejection
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Simulates occasional order rejections (insufficient margin, rate limits, etc.). Keep low (0.1-2%).
-                      </p>
+                      <Input id="rejectionRate" type="number" value={config.global.paperTrading?.rejectionRate || 0} onChange={(e) => { const v = parseFloat(e.target.value); handleGlobalChange('paperTrading', { ...config.global.paperTrading, rejectionRate: isNaN(v) ? 0 : Math.max(0, Math.min(100, v)) }); }} className="w-32" min="0" max="100" step="0.1" />
+                      <p className="text-xs text-muted-foreground">% chance of random rejection — keep &lt;2%</p>
                     </div>
-
-                    <Separator className="bg-blue-200 dark:bg-blue-900" />
-
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between pt-2">
                       <div className="space-y-0.5">
-                        <Label htmlFor="enableRealisticFills">Realistic Fill Simulation</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Use orderbook depth for more accurate fill simulation
-                        </p>
+                        <Label>Realistic Fill Simulation</Label>
+                        <p className="text-xs text-muted-foreground">Use orderbook depth for fills</p>
                       </div>
-                      <Switch
-                        id="enableRealisticFills"
-                        checked={config.global.paperTrading?.enableRealisticFills || false}
-                        onCheckedChange={(checked) => {
-                          handleGlobalChange('paperTrading', {
-                            ...config.global.paperTrading,
-                            enableRealisticFills: checked
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>Paper Trading Active:</strong> These settings help simulate real trading conditions. 
-                        Start with conservative settings (low slippage, minimal latency) and gradually increase for stress testing.
-                      </AlertDescription>
-                    </Alert>
-
-                    <Separator className="bg-blue-200 dark:bg-blue-900" />
-
-                    {/* Reset Paper Trading Button */}
-                    <div className="space-y-2">
-                      <Label>Reset Paper Trading</Label>
-                      <div className="flex items-center gap-4">
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={async () => {
-                            if (!confirm('This will delete all paper trading positions and reset your balance. Continue?')) {
-                              return;
-                            }
-                            try {
-                              const response = await fetch('/api/paper-trading/reset', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                  newBalance: config.global.paperTrading?.startingBalance || 1000 
-                                }),
-                              });
-                              if (response.ok) {
-                                toast.success('Paper trading reset successfully');
-                                window.location.reload();
-                              } else {
-                                toast.error('Failed to reset paper trading');
-                              }
-                            } catch (_error) {
-                              toast.error('Error resetting paper trading');
-                            }
-                          }}
-                        >
-                          Reset Paper Trading
-                        </Button>
-                        <span className="text-xs text-muted-foreground">
-                          Clear all positions and reset balance to {config.global.paperTrading?.startingBalance || 1000} USDT
-                        </span>
-                      </div>
+                      <Switch checked={config.global.paperTrading?.enableRealisticFills || false} onCheckedChange={(checked) => handleGlobalChange('paperTrading', { ...config.global.paperTrading, enableRealisticFills: checked })} />
                     </div>
                   </div>
+                  <Button type="button" variant="destructive" size="sm" onClick={async () => { if (!confirm('This will delete all paper trading positions and reset your balance. Continue?')) return; try { const r = await fetch('/api/paper-trading/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newBalance: config.global.paperTrading?.startingBalance || 1000 }) }); if (r.ok) { toast.success('Paper trading reset'); window.location.reload(); } else { toast.error('Failed to reset'); } } catch { toast.error('Error resetting'); } }}>
+                    Reset Paper Trading
+                  </Button>
                 </div>
               )}
 
               <Separator />
+
+              <div className="space-y-1.5">
+                <Label htmlFor="positionMode">Position Mode</Label>
+                <select id="positionMode" value={config.global.positionMode || 'ONE_WAY'} onChange={(e) => handleGlobalChange('positionMode', e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <option value="ONE_WAY">One-way Mode (BOTH)</option>
+                  <option value="HEDGE">Hedge Mode (LONG/SHORT)</option>
+                </select>
+                <p className="text-xs text-muted-foreground">One-way: single position per symbol · Hedge: simultaneous longs &amp; shorts</p>
+              </div>
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="debugMode">Debug Mode</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Enable verbose console logging for troubleshooting
-                  </p>
+                  <p className="text-xs text-muted-foreground">Verbose console logging</p>
                 </div>
-                <Switch
-                  id="debugMode"
-                  checked={config.global.debugMode || false}
-                  onCheckedChange={(checked) => handleGlobalChange('debugMode', checked)}
-                />
+                <Switch id="debugMode" checked={config.global.debugMode || false} onCheckedChange={(checked) => handleGlobalChange('debugMode', checked)} />
               </div>
+            </CardContent>
+          </Card>
 
-              <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="positionMode">Position Mode</Label>
-                <select
-                  id="positionMode"
-                  value={config.global.positionMode || 'ONE_WAY'}
-                  onChange={(e) => handleGlobalChange('positionMode', e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="ONE_WAY">One-way Mode (BOTH)</option>
-                  <option value="HEDGE">Hedge Mode (LONG/SHORT)</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  One-way: All positions use BOTH | Hedge: Separate LONG and SHORT positions
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="maxOpenPositions">Max Open Positions</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="maxOpenPositions"
-                    value={config.global.maxOpenPositions ?? ''}
-                    onChange={(value) => handleGlobalChange('maxOpenPositions', value)}
-                    defaultValue={10}
-                    className="w-24"
-                    min="1"
-                    max="50"
-                    step="1"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Maximum concurrent positions (hedged pairs count as one)
-                  </span>
+          {/* ── 2. POSITION LIMITS ───────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Settings2 className="h-4 w-4" />
+                Position Limits
+              </CardTitle>
+              <CardDescription>How many positions the bot can hold at once</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="maxOpenPositions">Max Open Positions</Label>
+                  <NumberInput id="maxOpenPositions" value={config.global.maxOpenPositions ?? ''} onChange={(v) => handleGlobalChange('maxOpenPositions', v)} defaultValue={10} className="w-full" min="1" max="50" step="1" />
+                  <p className="text-xs text-muted-foreground">Total simultaneous positions</p>
                 </div>
-              </div>
-
-              {/* Directional Position Limits */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="maxLongPositions">Max Long Positions</Label>
-                  <div className="flex items-center space-x-4">
-                    <NumberInput
-                      id="maxLongPositions"
-                      value={config.global.maxLongPositions ?? ''}
-                      onChange={(value) => handleGlobalChange('maxLongPositions', value)}
-                      defaultValue={3}
-                      className="w-24"
-                      min="1"
-                      max="20"
-                      step="1"
-                    />
-                    <span className="text-sm text-muted-foreground">Max longs</span>
-                  </div>
+                  <NumberInput id="maxLongPositions" value={config.global.maxLongPositions ?? ''} onChange={(v) => handleGlobalChange('maxLongPositions', v)} defaultValue={3} className="w-full" min="1" max="20" step="1" />
+                  <p className="text-xs text-muted-foreground">Max longs at once</p>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="maxShortPositions">Max Short Positions</Label>
-                  <div className="flex items-center space-x-4">
-                    <NumberInput
-                      id="maxShortPositions"
-                      value={config.global.maxShortPositions ?? ''}
-                      onChange={(value) => handleGlobalChange('maxShortPositions', value)}
-                      defaultValue={3}
-                      className="w-24"
-                      min="1"
-                      max="20"
-                      step="1"
-                    />
-                    <span className="text-sm text-muted-foreground">Max shorts</span>
-                  </div>
+                  <NumberInput id="maxShortPositions" value={config.global.maxShortPositions ?? ''} onChange={(v) => handleGlobalChange('maxShortPositions', v)} defaultValue={3} className="w-full" min="1" max="20" step="1" />
+                  <p className="text-xs text-muted-foreground">Max shorts at once</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <Separator />
-
-              {/* Trailing Take Profit */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="flex items-center gap-2">
-                      <Crosshair className="h-4 w-4" />
-                      Trailing Take Profit
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Trail profit from peak instead of using fixed TP targets
-                    </p>
-                  </div>
-                  <Switch
-                    checked={config.global.enableTrailingTP === true}
-                    onCheckedChange={(checked) =>
-                      handleGlobalChange('enableTrailingTP', checked)
-                    }
-                  />
+          {/* ── 3. SIZE & RISK ───────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Gauge className="h-4 w-4" />
+                Size &amp; Risk
+              </CardTitle>
+              <CardDescription>Global trade size multiplier and risk budget</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Label>Trade Size Multiplier</Label>
+                  {(() => {
+                    const m = config.global.tradeSizeMultiplier ?? 1.0;
+                    if (m > 2.0) return <Badge variant="destructive" className="text-[10px]">HIGH RISK</Badge>;
+                    if (m > 1.0) return <Badge className="text-[10px] bg-yellow-500 hover:bg-yellow-600">RISK-ON</Badge>;
+                    if (m < 1.0) return <Badge variant="secondary" className="text-[10px]">RISK-OFF</Badge>;
+                    return <Badge variant="outline" className="text-[10px]">NORMAL</Badge>;
+                  })()}
                 </div>
-                {config.global.enableTrailingTP && (
-                  <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
-                    <div className="space-y-2">
-                      <Label htmlFor="trailingTPActivation">Activation %</Label>
-                      <div className="flex items-center space-x-2">
-                        <NumberInput
-                          id="trailingTPActivation"
-                          value={config.global.trailingTPActivation ?? ''}
-                          onChange={(value) => handleGlobalChange('trailingTPActivation', value)}
-                          defaultValue={0.5}
-                          className="w-24"
-                          min="0.1"
-                          max="10"
-                          step="0.1"
-                        />
-                        <span className="text-xs text-muted-foreground">Profit % to start trailing</span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="trailingTPCallback">Callback %</Label>
-                      <div className="flex items-center space-x-2">
-                        <NumberInput
-                          id="trailingTPCallback"
-                          value={config.global.trailingTPCallback ?? ''}
-                          onChange={(value) => handleGlobalChange('trailingTPCallback', value)}
-                          defaultValue={0.3}
-                          className="w-24"
-                          min="0.05"
-                          max="5"
-                          step="0.05"
-                        />
-                        <span className="text-xs text-muted-foreground">Drop from peak to close</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* DCA Entry Spacing */}
-              <div className="space-y-2">
-                <Label htmlFor="minEntrySpacingPercent" className="flex items-center gap-2">
-                  <ArrowUpDown className="h-4 w-4" />
-                  Min DCA Entry Spacing %
-                </Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="minEntrySpacingPercent"
-                    value={config.global.minEntrySpacingPercent ?? ''}
-                    onChange={(value) => handleGlobalChange('minEntrySpacingPercent', value)}
-                    defaultValue={0.5}
-                    className="w-24"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Minimum price distance between DCA entries on same symbol (0 = disabled)
-                  </span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Trade Size Multiplier (Risk Mode) */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Gauge className="h-4 w-4" />
-                    Trade Size Multiplier
-                    {(() => {
-                      const m = config.global.tradeSizeMultiplier ?? 1.0;
-                      if (m > 2.0) return <Badge variant="destructive" className="ml-2 text-[10px]">HIGH RISK</Badge>;
-                      if (m > 1.0) return <Badge className="ml-2 text-[10px] bg-yellow-500 hover:bg-yellow-600">RISK-ON</Badge>;
-                      if (m < 1.0) return <Badge variant="secondary" className="ml-2 text-[10px]">RISK-OFF</Badge>;
-                      return <Badge variant="outline" className="ml-2 text-[10px]">NORMAL</Badge>;
-                    })()}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Scale all trade sizes globally. Quick risk-on/risk-off switch without editing each symbol.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex gap-2">
-                    {[
-                      { label: '0.5×', value: 0.5, desc: 'Half size' },
-                      { label: '1×', value: 1.0, desc: 'Normal' },
-                      { label: '1.5×', value: 1.5, desc: '' },
-                      { label: '2×', value: 2.0, desc: '' },
-                      { label: '3×', value: 3.0, desc: '' },
-                    ].map((preset) => (
-                      <Button
-                        key={preset.value}
-                        type="button"
-                        size="sm"
-                        variant={(config.global.tradeSizeMultiplier ?? 1.0) === preset.value ? 'default' : 'outline'}
-                        className={`px-3 ${
-                          preset.value > 2.0 && (config.global.tradeSizeMultiplier ?? 1.0) === preset.value
-                            ? 'bg-red-600 hover:bg-red-700'
-                            : preset.value > 1.0 && (config.global.tradeSizeMultiplier ?? 1.0) === preset.value
-                            ? 'bg-yellow-600 hover:bg-yellow-700'
-                            : ''
-                        }`}
-                        onClick={() => handleGlobalChange('tradeSizeMultiplier', preset.value)}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <span className="text-sm text-muted-foreground">or</span>
-                  <NumberInput
-                    id="tradeSizeMultiplier"
-                    value={config.global.tradeSizeMultiplier ?? ''}
-                    onChange={(value) => handleGlobalChange('tradeSizeMultiplier', value)}
-                    defaultValue={1.0}
-                    className="w-24"
-                    min="0.1"
-                    max="5"
-                    step="0.1"
-                  />
+                <p className="text-xs text-muted-foreground">Scales all per-symbol trade sizes globally — quick risk-on/off without editing each symbol</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[{ label: '0.5×', value: 0.5 }, { label: '1×', value: 1.0 }, { label: '1.5×', value: 1.5 }, { label: '2×', value: 2.0 }, { label: '3×', value: 3.0 }].map((p) => (
+                    <Button key={p.value} type="button" size="sm" variant={(config.global.tradeSizeMultiplier ?? 1.0) === p.value ? 'default' : 'outline'} className={`px-3 ${p.value > 2 && (config.global.tradeSizeMultiplier ?? 1) === p.value ? 'bg-red-600 hover:bg-red-700' : p.value > 1 && (config.global.tradeSizeMultiplier ?? 1) === p.value ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`} onClick={() => handleGlobalChange('tradeSizeMultiplier', p.value)}>{p.label}</Button>
+                  ))}
+                  <NumberInput value={config.global.tradeSizeMultiplier ?? ''} onChange={(v) => handleGlobalChange('tradeSizeMultiplier', v)} defaultValue={1.0} className="w-20" min="0.1" max="5" step="0.1" />
                 </div>
                 {(config.global.tradeSizeMultiplier ?? 1.0) > 1.0 && (
                   <Alert className={(config.global.tradeSizeMultiplier ?? 1.0) > 2.0 ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20'}>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      {(config.global.tradeSizeMultiplier ?? 1.0) > 2.0 ? (
-                        <><strong>⚠️ HIGH RISK:</strong> Trade sizes are {config.global.tradeSizeMultiplier}× normal. Losses will also be {config.global.tradeSizeMultiplier}× larger. Make sure you understand the risk.</>
-                      ) : (
-                        <>Trade sizes are {config.global.tradeSizeMultiplier ?? 1.0}× normal. Each position will use proportionally more margin. Capped by maxPositionSize per symbol.</>
-                      )}
-                    </AlertDescription>
+                    <AlertDescription>Trade sizes are {config.global.tradeSizeMultiplier}× normal. Losses scale proportionally.</AlertDescription>
                   </Alert>
-                )}
-                {(config.global.tradeSizeMultiplier ?? 1.0) < 1.0 && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400">
-                    🔵 Risk-off mode: Trade sizes reduced to {((config.global.tradeSizeMultiplier ?? 1.0) * 100).toFixed(0)}% of normal
-                  </p>
                 )}
               </div>
 
               <Separator />
 
-              {/* Threshold System Setting */}
-              <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="riskPercent">Risk Percentage</Label>
+                <div className="flex items-center gap-3">
+                  <NumberInput id="riskPercent" value={config.global.riskPercent ?? ''} onChange={(v) => handleGlobalChange('riskPercent', v)} defaultValue={0} className="w-24" min="0.1" max="100" step="0.1" />
+                  <span className="text-sm text-muted-foreground">% of account balance at risk</span>
+                </div>
+                <p className="text-xs text-amber-500">⚠️ Not yet implemented — reserved for future use</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── 4. EXIT STRATEGY ────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Crosshair className="h-4 w-4" />
+                Exit Strategy
+              </CardTitle>
+              <CardDescription>Trailing take-profit and DCA spacing defaults</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Trailing Take Profit</Label>
+                    <p className="text-xs text-muted-foreground">Trail from peak instead of fixed TP targets</p>
+                  </div>
+                  <Switch checked={config.global.enableTrailingTP === true} onCheckedChange={(checked) => handleGlobalChange('enableTrailingTP', checked)} />
+                </div>
+                {config.global.enableTrailingTP && (
+                  <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="trailingTPActivation">Activation %</Label>
+                      <NumberInput id="trailingTPActivation" value={config.global.trailingTPActivation ?? ''} onChange={(v) => handleGlobalChange('trailingTPActivation', v)} defaultValue={0.5} className="w-24" min="0.1" max="10" step="0.1" />
+                      <p className="text-xs text-muted-foreground">Profit % before trailing starts</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="trailingTPCallback">Callback %</Label>
+                      <NumberInput id="trailingTPCallback" value={config.global.trailingTPCallback ?? ''} onChange={(v) => handleGlobalChange('trailingTPCallback', v)} defaultValue={0.3} className="w-24" min="0.05" max="5" step="0.05" />
+                      <p className="text-xs text-muted-foreground">Drop from peak to trigger close</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-1.5">
+                <Label htmlFor="minEntrySpacingPercent" className="flex items-center gap-2">
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Min DCA Entry Spacing %
+                </Label>
+                <div className="flex items-center gap-3">
+                  <NumberInput id="minEntrySpacingPercent" value={config.global.minEntrySpacingPercent ?? ''} onChange={(v) => handleGlobalChange('minEntrySpacingPercent', v)} defaultValue={0.5} className="w-24" min="0" max="10" step="0.1" />
+                  <span className="text-sm text-muted-foreground">Min price distance between DCA entries (0 = off)</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── 5. SIGNAL FILTERS ───────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BarChart3 className="h-4 w-4" />
+                Signal Filters
+              </CardTitle>
+              <CardDescription>Control which liquidation signals actually trigger trades</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="flex items-center gap-2">Trade Quality Scoring</Label>
+                    <p className="text-xs text-muted-foreground">Score trades 0–3 on spike, volume &amp; regime. 0 = skip, adjusts size 0.5×–1.5×</p>
+                  </div>
+                  <Switch checked={config.global.useTradeQualityScoring !== false} onCheckedChange={(checked) => handleGlobalChange('useTradeQualityScoring', checked)} />
+                </div>
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {config.global.useTradeQualityScoring !== false
+                      ? <><strong>ACTIVE:</strong> Low-quality trades (0/3) are skipped. Position sizes scale 0.5×–1.5× with score.</>
+                      : <><strong>PASSIVE:</strong> Scores are logged but nothing is blocked — good for observing before enabling.</>}
+                  </AlertDescription>
+                </Alert>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" />
+                      <TrendingUp className="h-3.5 w-3.5" />
                       60-Second Volume Threshold System
                     </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Accumulate liquidation volume over 60-second windows
-                    </p>
+                    <p className="text-xs text-muted-foreground">Accumulate liquidation volume over rolling windows before triggering</p>
                   </div>
-                  <Switch
-                    checked={config.global.useThresholdSystem || false}
-                    onCheckedChange={(checked) =>
-                      handleGlobalChange('useThresholdSystem', checked)
-                    }
-                  />
+                  <Switch checked={config.global.useThresholdSystem || false} onCheckedChange={(checked) => handleGlobalChange('useThresholdSystem', checked)} />
                 </div>
                 {config.global.useThresholdSystem && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      When enabled, trades will only trigger when cumulative liquidation volume in a 60-second window meets the threshold. Configure per-symbol settings in the symbols tab.
-                    </AlertDescription>
+                    <AlertDescription className="text-xs">Trades only trigger when the rolling window fills to threshold. Configure time window &amp; cooldown per symbol in the Symbols tab.</AlertDescription>
                   </Alert>
                 )}
               </div>
 
-              {/* Trade Quality Scoring Toggle */}
               <Separator />
-              <div className="space-y-4">
+
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      Trade Quality Scoring
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Filter trades based on VWAP regime, spike velocity, and volume trends
-                    </p>
-                  </div>
-                  <Switch
-                    checked={config.global.useTradeQualityScoring !== false}
-                    onCheckedChange={(checked) =>
-                      handleGlobalChange('useTradeQualityScoring', checked)
-                    }
-                  />
-                </div>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {config.global.useTradeQualityScoring !== false ? (
-                      <>
-                        <strong>ACTIVE:</strong> Trades are scored 0-3 based on market conditions. Low quality trades (score 0) are skipped, and position sizes are adjusted based on quality (0.5x-1.5x).
-                      </>
-                    ) : (
-                      <>
-                        <strong>PASSIVE:</strong> Trade quality is still calculated and recorded for monitoring, but no trades will be blocked or filtered. Use this to observe scoring before enabling full filtering.
-                      </>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
+                      <Clock className="h-3.5 w-3.5" />
                       FTA Exit Analysis
                     </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Analyze positions for early exit signals based on duration and price action
-                    </p>
+                    <p className="text-xs text-muted-foreground">Monitor positions for early-exit signals — does NOT auto-close</p>
                   </div>
-                  <Switch
-                    checked={config.global.useFTAExitAnalysis === true}
-                    onCheckedChange={(checked) =>
-                      handleGlobalChange('useFTAExitAnalysis', checked)
-                    }
-                  />
+                  <Switch checked={config.global.useFTAExitAnalysis === true} onCheckedChange={(checked) => handleGlobalChange('useFTAExitAnalysis', checked)} />
                 </div>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {config.global.useFTAExitAnalysis === true ? (
-                      <>
-                        <strong>ENABLED:</strong> Monitors positions and logs signals when trades exceed 3x average winning duration or hit First Trouble Area (FTA) price levels. Signals are logged every 5 minutes per position. Does NOT auto-close positions.
-                      </>
-                    ) : (
-                      <>
-                        <strong>DISABLED:</strong> No FTA exit analysis is performed. Enable this if you want to be alerted about positions that may be underperforming.
-                      </>
-                    )}
-                  </AlertDescription>
-                </Alert>
+                {config.global.useFTAExitAnalysis && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">Logs signals every 5 min when trades exceed 3× average win duration or hit First Trouble Area prices. Shown in Signal Feed.</AlertDescription>
+                  </Alert>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Server Settings Card */}
+          {/* ── 6. RISK CONTROLS ────────────────────────────────────── */}
+
+          {/* Account Health Monitor */}
           <Card>
-            <CardHeader>
-              <CardTitle>Server Settings</CardTitle>
-              <CardDescription>
-                Dashboard security and network configuration
-              </CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Heart className="h-4 w-4" />
+                Account Health Monitor
+              </CardTitle>
+              <CardDescription>Pause new entries when the account draws down too far. DCA into existing positions is never blocked.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="dashboardPassword">Dashboard Password</Label>
-                <Input
-                  id="dashboardPassword"
-                  type="password"
-                  value={config.global.server?.dashboardPassword || ''}
-                  onChange={(e) => handleGlobalChange('server', {
-                    ...config.global.server,
-                    dashboardPassword: e.target.value
-                  })}
-                  placeholder="Enter dashboard password (min 4 characters)"
-                  minLength={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Set a password to protect your dashboard when exposing it to external networks
-                </p>
-                {config.global.server?.dashboardPassword && config.global.server.dashboardPassword.length > 0 && config.global.server.dashboardPassword.length < 4 && (
-                  <p className="text-xs text-destructive">
-                    Password must be at least 4 characters
-                  </p>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="maxDrawdownPercent">Max Drawdown (%)</Label>
+                  <NumberInput id="maxDrawdownPercent" value={config.global.accountHealth?.maxDrawdownPercent ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, maxDrawdownPercent: typeof v === 'number' ? Math.max(0, v) : 25 })} defaultValue={25} className="w-full" min="0" max="100" step="0.5" />
+                  <p className="text-xs text-muted-foreground">Pause when balance drops this % from session peak</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="resumeAtDrawdownPercent">Resume At Drawdown (%)</Label>
+                  <NumberInput id="resumeAtDrawdownPercent" value={config.global.accountHealth?.resumeAtDrawdownPercent ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, resumeAtDrawdownPercent: typeof v === 'number' ? Math.max(0, v) : 15 })} defaultValue={15} className="w-full" min="0" max="100" step="0.5" />
+                  <p className="text-xs text-muted-foreground">Resume trading when recovered to this % drawdown</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="maxUnrealizedLossPercent">Max Unrealized Loss (%)</Label>
+                  <NumberInput id="maxUnrealizedLossPercent" value={config.global.accountHealth?.maxUnrealizedLossPercent ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, maxUnrealizedLossPercent: typeof v === 'number' ? Math.max(0, v) : 20 })} defaultValue={20} className="w-full" min="0" max="100" step="0.5" />
+                  <p className="text-xs text-muted-foreground">Also pause when open positions lose this % of balance</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="checkIntervalSeconds">Check Interval (sec)</Label>
+                  <NumberInput id="checkIntervalSeconds" value={config.global.accountHealth?.checkIntervalSeconds ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, checkIntervalSeconds: typeof v === 'number' ? Math.max(5, v) : 60 })} defaultValue={60} className="w-full" min="5" max="300" step="5" />
+                  <p className="text-xs text-muted-foreground">How often to check account health</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-1.5">
+                <Label htmlFor="closeAllAtDrawdownPercent" className="flex items-center gap-1.5 text-red-500">
+                  Emergency Close-All Drawdown (%)
+                </Label>
+                <div className="flex items-center gap-3">
+                  <NumberInput id="closeAllAtDrawdownPercent" value={config.global.accountHealth?.closeAllAtDrawdownPercent ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, closeAllAtDrawdownPercent: typeof v === 'number' ? Math.max(0, v) : 0 })} defaultValue={0} className="w-24" min="0" max="100" step="1" />
+                  <span className="text-xs text-muted-foreground">Close ALL positions at this drawdown (0 = disabled)</span>
+                </div>
+                {(config.global.accountHealth?.closeAllAtDrawdownPercent || 0) > 0 && (
+                  <p className="text-xs text-red-500">⚠️ Will close all positions — including profitable ones!</p>
                 )}
               </div>
 
               <Separator />
 
-              <div className="space-y-2">
-                <Label htmlFor="dashboardPort">Dashboard Port</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="dashboardPort"
-                    value={config.global.server?.dashboardPort ?? ''}
-                    onChange={(value) => {
-                      handleGlobalChange('server', {
-                        ...config.global.server,
-                        dashboardPort: value
-                      });
-                    }}
-                    defaultValue={3000}
-                    className="w-24"
-                    min="1024"
-                    max="65535"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Port for the web dashboard (default: 3000)
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="websocketPort">WebSocket Port</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="websocketPort"
-                    value={config.global.server?.websocketPort ?? ''}
-                    onChange={(value) => {
-                      handleGlobalChange('server', {
-                        ...config.global.server,
-                        websocketPort: value
-                      });
-                    }}
-                    defaultValue={8080}
-                    className="w-24"
-                    min="1024"
-                    max="65535"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Port for WebSocket server communication (default: 8080)
-                  </span>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="useRemoteWebSocket"
-                    checked={config.global.server?.useRemoteWebSocket || false}
-                    onCheckedChange={(checked) => {
-                      handleGlobalChange('server', {
-                        ...config.global.server,
-                        useRemoteWebSocket: checked
-                      });
-                    }}
-                  />
-                  <Label htmlFor="useRemoteWebSocket" className="cursor-pointer">
-                    Enable Remote WebSocket Access
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Allow the dashboard to connect to the bot from remote machines. When enabled, the WebSocket will automatically use the browser&apos;s hostname instead of localhost.
-                </p>
-
-                {config.global.server?.useRemoteWebSocket && (
-                  <div className="space-y-2 pl-6">
-                    <Label htmlFor="websocketHost">WebSocket Host (Optional)</Label>
-                    <Input
-                      id="websocketHost"
-                      type="text"
-                      value={config.global.server?.websocketHost || ''}
-                      onChange={(e) => {
-                        handleGlobalChange('server', {
-                          ...config.global.server,
-                          websocketHost: e.target.value || null
-                        });
-                      }}
-                      placeholder="Auto-detect from browser (recommended)"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Leave empty to auto-detect the host from your browser&apos;s location. Only set this if you need a specific hostname or IP address.
-                    </p>
+              <div>
+                <h4 className="text-sm font-medium mb-3">🛡️ DCA Guardrails <span className="text-xs text-muted-foreground font-normal">— hard limits on position growth</span></h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="maxPositionNotional">Max Position Notional ($)</Label>
+                    <NumberInput id="maxPositionNotional" value={config.global.accountHealth?.maxPositionNotional ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, maxPositionNotional: typeof v === 'number' ? Math.max(0, v) : 0 })} defaultValue={0} className="w-full" min="0" max="10000" step="5" />
+                    <p className="text-xs text-muted-foreground">Stop DCA when notional hits this cap (0 = unlimited)</p>
                   </div>
-                )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="maxDCAEntries">Max DCA Entries</Label>
+                    <NumberInput id="maxDCAEntries" value={config.global.accountHealth?.maxDCAEntries ?? ''} onChange={(v) => handleGlobalChange('accountHealth', { ...config.global.accountHealth, maxDCAEntries: typeof v === 'number' ? Math.max(0, Math.round(v)) : 0 })} defaultValue={0} className="w-full" min="0" max="100" step="1" />
+                    <p className="text-xs text-muted-foreground">Max DCA entries per position (0 = unlimited)</p>
+                  </div>
+                </div>
               </div>
-
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Note:</strong> After changing ports, you&apos;ll need to restart the application and access it at the new port.
-                  {config.global.server?.dashboardPassword && " Password protection is active - you'll need to login to access the dashboard."}
-                </AlertDescription>
-              </Alert>
             </CardContent>
           </Card>
 
-          {/* Cascade Protection Card */}
+          {/* Cascade Protection */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldAlert className="h-4 w-4" />
                 Cascade Protection
               </CardTitle>
-              <CardDescription>
-                Circuit breaker that pauses new entries during liquidation cascades to prevent correlated blowups
-              </CardDescription>
+              <CardDescription>Circuit breaker — detect market-wide liquidation cascades and pause/reduce trading</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Enable Cascade Protection</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Detect market-wide liquidation cascades and pause trading
-                  </p>
+                  <p className="text-xs text-muted-foreground">Monitor exchange-wide liquidation spikes</p>
                 </div>
-                <Switch
-                  checked={config.global.cascadeProtection?.enabled !== false}
-                  onCheckedChange={(checked) =>
-                    handleGlobalChange('cascadeProtection', {
-                      ...config.global.cascadeProtection,
-                      enabled: checked
-                    })
-                  }
-                />
+                <Switch checked={config.global.cascadeProtection?.enabled !== false} onCheckedChange={(checked) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, enabled: checked })} />
               </div>
 
               {config.global.cascadeProtection?.enabled !== false && (
                 <>
-                  <Separator />
-
-                  {/* Cascade Mode */}
-                  <div className="space-y-2">
-                    <Label htmlFor="cascadeMode">Cascade Mode</Label>
-                    <Select
-                      value={config.global.cascadeProtection?.mode || 'LOG_ONLY'}
-                      onValueChange={(value) =>
-                        handleGlobalChange('cascadeProtection', {
-                          ...config.global.cascadeProtection,
-                          mode: value as 'LOG_ONLY' | 'REDUCE' | 'BLOCK'
-                        })
-                      }
-                    >
-                      <SelectTrigger id="cascadeMode" className="w-full">
-                        <SelectValue placeholder="Select mode" />
-                      </SelectTrigger>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cascadeMode">Mode</Label>
+                    <Select value={config.global.cascadeProtection?.mode || 'LOG_ONLY'} onValueChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, mode: v as 'LOG_ONLY' | 'REDUCE' | 'BLOCK' })}>
+                      <SelectTrigger id="cascadeMode"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="LOG_ONLY">Log Only — Detect &amp; report, never block trades</SelectItem>
-                        <SelectItem value="REDUCE">Reduce — Shrink position sizes during cascades</SelectItem>
-                        <SelectItem value="BLOCK">Block — Pause all new entries during cascades</SelectItem>
+                        <SelectItem value="LOG_ONLY">Log Only — detect &amp; report, never block</SelectItem>
+                        <SelectItem value="REDUCE">Reduce — shrink position sizes during cascades</SelectItem>
+                        <SelectItem value="BLOCK">Block — pause all new entries during cascades</SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {config.global.cascadeProtection?.mode === 'BLOCK'
-                        ? '⚠️ BLOCK mode will prevent ALL new entries during a cascade, including high-edge contrarian signals'
-                        : config.global.cascadeProtection?.mode === 'REDUCE'
-                        ? 'Position sizes will be multiplied by the reduction factor below during cascades'
-                        : '✅ Cascades are detected and logged/shown on dashboard but never block trades (recommended)'}
+                      {config.global.cascadeProtection?.mode === 'BLOCK' ? '⚠️ Prevents ALL new entries including high-edge contrarian signals' : config.global.cascadeProtection?.mode === 'REDUCE' ? 'Position sizes × reduction factor during cascade' : '✅ Recommended — logs only, trades continue normally'}
                     </p>
                   </div>
 
-                  {/* Reduced Position Multiplier - only for REDUCE mode */}
                   {config.global.cascadeProtection?.mode === 'REDUCE' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="reducedPositionMultiplier">Position Size Multiplier</Label>
-                      <div className="flex items-center space-x-4">
-                        <NumberInput
-                          id="reducedPositionMultiplier"
-                          value={config.global.cascadeProtection?.reducedPositionMultiplier ?? ''}
-                          onChange={(value) =>
-                            handleGlobalChange('cascadeProtection', {
-                              ...config.global.cascadeProtection,
-                              reducedPositionMultiplier: typeof value === 'number' ? Math.min(1, Math.max(0.1, value)) : 0.5
-                            })
-                          }
-                          defaultValue={0.5}
-                          className="w-24"
-                          min="0.1"
-                          max="1"
-                          step="0.1"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Position sizes × {config.global.cascadeProtection?.reducedPositionMultiplier || 0.5} during cascade
-                        </span>
+                    <div className="space-y-1.5">
+                      <Label>Size Multiplier During Cascade</Label>
+                      <div className="flex items-center gap-3">
+                        <NumberInput value={config.global.cascadeProtection?.reducedPositionMultiplier ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, reducedPositionMultiplier: typeof v === 'number' ? Math.min(1, Math.max(0.1, v)) : 0.5 })} defaultValue={0.5} className="w-24" min="0.1" max="1" step="0.1" />
+                        <span className="text-xs text-muted-foreground">Sizes × {config.global.cascadeProtection?.reducedPositionMultiplier || 0.5} during cascade</span>
                       </div>
                     </div>
                   )}
 
-                  <Separator />
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="rollingWindowMinutes">Detection Window (min)</Label>
-                      <NumberInput
-                        id="rollingWindowMinutes"
-                        value={config.global.cascadeProtection?.rollingWindowMinutes ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            rollingWindowMinutes: typeof value === 'number' ? Math.max(1, value) : 5
-                          })
-                        }
-                        defaultValue={5}
-                        className="w-full"
-                        min="1"
-                        max="30"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">Window to detect abnormal liquidation activity</p>
+                    <div className="space-y-1.5">
+                      <Label>Detection Window (min)</Label>
+                      <NumberInput value={config.global.cascadeProtection?.rollingWindowMinutes ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, rollingWindowMinutes: typeof v === 'number' ? Math.max(1, v) : 5 })} defaultValue={5} className="w-full" min="1" max="30" step="1" />
+                      <p className="text-xs text-muted-foreground">Window to detect abnormal activity</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="baselineWindowMinutes">Baseline Window (min)</Label>
-                      <NumberInput
-                        id="baselineWindowMinutes"
-                        value={config.global.cascadeProtection?.baselineWindowMinutes ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            baselineWindowMinutes: typeof value === 'number' ? Math.max(5, value) : 30
-                          })
-                        }
-                        defaultValue={30}
-                        className="w-full"
-                        min="5"
-                        max="120"
-                        step="5"
-                      />
-                      <p className="text-xs text-muted-foreground">Longer window for &quot;normal&quot; volume baseline</p>
+                    <div className="space-y-1.5">
+                      <Label>Baseline Window (min)</Label>
+                      <NumberInput value={config.global.cascadeProtection?.baselineWindowMinutes ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, baselineWindowMinutes: typeof v === 'number' ? Math.max(5, v) : 30 })} defaultValue={30} className="w-full" min="5" max="120" step="5" />
+                      <p className="text-xs text-muted-foreground">Longer window for "normal" baseline</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Volume Spike Multiplier</Label>
+                      <NumberInput value={config.global.cascadeProtection?.volumeMultiplierThreshold ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, volumeMultiplierThreshold: typeof v === 'number' ? Math.max(1.5, v) : 3.0 })} defaultValue={3.0} className="w-full" min="1.5" max="10" step="0.5" />
+                      <p className="text-xs text-muted-foreground">Trigger when volume Nx above baseline</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Min Symbols for Cascade</Label>
+                      <NumberInput value={config.global.cascadeProtection?.minSymbolsForCascade ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, minSymbolsForCascade: typeof v === 'number' ? Math.max(2, v) : 3 })} defaultValue={3} className="w-full" min="2" max="10" step="1" />
+                      <p className="text-xs text-muted-foreground">Symbols liquidating simultaneously</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Directional Skew Threshold</Label>
+                      <NumberInput value={config.global.cascadeProtection?.directionalSkewThreshold ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, directionalSkewThreshold: typeof v === 'number' ? Math.min(1, Math.max(0.5, v)) : 0.8 })} defaultValue={0.8} className="w-full" min="0.5" max="1" step="0.05" />
+                      <p className="text-xs text-muted-foreground">% same direction = trending (0.8 = 80%)</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Cooldown (min)</Label>
+                      <NumberInput value={config.global.cascadeProtection?.cooldownMinutes ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, cooldownMinutes: typeof v === 'number' ? Math.max(1, v) : 10 })} defaultValue={10} className="w-full" min="1" max="60" step="1" />
+                      <p className="text-xs text-muted-foreground">Pause duration after cascade detected</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="volumeMultiplierThreshold">Volume Spike Multiplier</Label>
-                      <NumberInput
-                        id="volumeMultiplierThreshold"
-                        value={config.global.cascadeProtection?.volumeMultiplierThreshold ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            volumeMultiplierThreshold: typeof value === 'number' ? Math.max(1.5, value) : 3.0
-                          })
-                        }
-                        defaultValue={3.0}
-                        className="w-full"
-                        min="1.5"
-                        max="10"
-                        step="0.5"
-                      />
-                      <p className="text-xs text-muted-foreground">Trigger when volume is Nx above baseline</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="minSymbolsForCascade">Min Symbols for Cascade</Label>
-                      <NumberInput
-                        id="minSymbolsForCascade"
-                        value={config.global.cascadeProtection?.minSymbolsForCascade ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            minSymbolsForCascade: typeof value === 'number' ? Math.max(2, value) : 3
-                          })
-                        }
-                        defaultValue={3}
-                        className="w-full"
-                        min="2"
-                        max="10"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">Symbols liquidating simultaneously to confirm cascade</p>
+                  <div className="space-y-1.5">
+                    <Label>Min Volume for Detection ($)</Label>
+                    <div className="flex items-center gap-3">
+                      <NumberInput value={config.global.cascadeProtection?.minVolumeForDetection ?? ''} onChange={(v) => handleGlobalChange('cascadeProtection', { ...config.global.cascadeProtection, minVolumeForDetection: typeof v === 'number' ? Math.max(0, v) : 50000 })} defaultValue={50000} className="w-32" min="0" max="500000" step="5000" />
+                      <span className="text-xs text-muted-foreground">Min $ in window before detection activates</span>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="directionalSkewThreshold">Directional Skew Threshold</Label>
-                      <NumberInput
-                        id="directionalSkewThreshold"
-                        value={config.global.cascadeProtection?.directionalSkewThreshold ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            directionalSkewThreshold: typeof value === 'number' ? Math.min(1, Math.max(0.5, value)) : 0.8
-                          })
-                        }
-                        defaultValue={0.8}
-                        className="w-full"
-                        min="0.5"
-                        max="1"
-                        step="0.05"
-                      />
-                      <p className="text-xs text-muted-foreground">80%+ same direction = trend (not mean reversion)</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cooldownMinutes">Cooldown (min)</Label>
-                      <NumberInput
-                        id="cooldownMinutes"
-                        value={config.global.cascadeProtection?.cooldownMinutes ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            cooldownMinutes: typeof value === 'number' ? Math.max(1, value) : 10
-                          })
-                        }
-                        defaultValue={10}
-                        className="w-full"
-                        min="1"
-                        max="60"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">Minutes to pause trading after cascade detected</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="minVolumeForDetection">Min Volume for Detection ($)</Label>
-                    <div className="flex items-center space-x-4">
-                      <NumberInput
-                        id="minVolumeForDetection"
-                        value={config.global.cascadeProtection?.minVolumeForDetection ?? ''}
-                        onChange={(value) =>
-                          handleGlobalChange('cascadeProtection', {
-                            ...config.global.cascadeProtection,
-                            minVolumeForDetection: typeof value === 'number' ? Math.max(0, value) : 50000
-                          })
-                        }
-                        defaultValue={50000}
-                        className="w-32"
-                        min="0"
-                        max="500000"
-                        step="5000"
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        Minimum $ volume in window before cascade detection activates
-                      </span>
-                    </div>
-                  </div>
-
-                  <Alert>
-                    <ShieldAlert className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>How it works:</strong> Monitors ALL liquidations across the exchange (not just your symbols). 
-                      When volume spikes {config.global.cascadeProtection?.volumeMultiplierThreshold || 3}x above baseline AND 
-                      {config.global.cascadeProtection?.minSymbolsForCascade || 3}+ symbols are liquidating simultaneously or 
-                      {((config.global.cascadeProtection?.directionalSkewThreshold || 0.8) * 100).toFixed(0)}%+ of liquidations are 
-                      in the same direction, a cascade is detected.
-                      {config.global.cascadeProtection?.mode === 'BLOCK' 
-                        ? ` New entries are paused for ${config.global.cascadeProtection?.cooldownMinutes || 10} minutes.`
-                        : config.global.cascadeProtection?.mode === 'REDUCE'
-                        ? ` Position sizes are reduced by ${config.global.cascadeProtection?.reducedPositionMultiplier || 0.5}x for ${config.global.cascadeProtection?.cooldownMinutes || 10} minutes.`
-                        : ' The event is logged and shown on the dashboard but trading continues normally.'}
-                      {' '}Existing positions keep their SL/TP.
-                    </AlertDescription>
-                  </Alert>
                 </>
               )}
             </CardContent>
           </Card>
 
-          {/* Liquidation Database Settings Card */}
+          {/* Adaptive Thresholds */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Liquidation Database
-              </CardTitle>
-              <CardDescription>
-                Configure how long to keep liquidation data for chart analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="retentionDays">Data Retention (Days)</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="retentionDays"
-                    value={config.global.liquidationDatabase?.retentionDays ?? ''}
-                    onChange={(value) => {
-                      handleGlobalChange('liquidationDatabase', {
-                        ...config.global.liquidationDatabase,
-                        retentionDays: typeof value === 'number' ? Math.max(0, value) : 90
-                      });
-                    }}
-                    defaultValue={90}
-                    className="w-24"
-                    min="0"
-                    max="3650"
-                    step="1"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Days to keep liquidation data (0 = never delete)
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  More data means better chart analysis but uses more disk space. 
-                  Set to 0 to keep all liquidation data permanently.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cleanupInterval">Cleanup Interval (Hours)</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="cleanupInterval"
-                    value={config.global.liquidationDatabase?.cleanupIntervalHours ?? ''}
-                    onChange={(value) => {
-                      handleGlobalChange('liquidationDatabase', {
-                        ...config.global.liquidationDatabase,
-                        cleanupIntervalHours: typeof value === 'number' ? Math.max(1, value) : 24
-                      });
-                    }}
-                    defaultValue={24}
-                    className="w-24"
-                    min="1"
-                    max="168"
-                    step="1"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    How often to run database cleanup (default: 24)
-                  </span>
-                </div>
-              </div>
-
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Current settings:</strong> {
-                    (config.global.liquidationDatabase?.retentionDays ?? 90) === 0 
-                      ? "All liquidation data will be kept permanently" 
-                      : `Liquidation data older than ${config.global.liquidationDatabase?.retentionDays ?? 90} days will be automatically deleted every ${config.global.liquidationDatabase?.cleanupIntervalHours ?? 24} hours`
-                  }
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-
-          {/* Account Health Monitor Settings Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Heart className="h-5 w-5" />
-                Account Health Monitor
-              </CardTitle>
-              <CardDescription>
-                Tracks account drawdown from session peak balance and pauses new entries during significant losses. DCA to existing positions is never blocked.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxDrawdownPercent">Max Drawdown (%)</Label>
-                  <NumberInput
-                    id="maxDrawdownPercent"
-                    value={config.global.accountHealth?.maxDrawdownPercent ?? ''}
-                    onChange={(value) =>
-                      handleGlobalChange('accountHealth', {
-                        ...config.global.accountHealth,
-                        maxDrawdownPercent: typeof value === 'number' ? Math.max(1, Math.min(50, value)) : 25
-                      })
-                    }
-                    defaultValue={25}
-                    className="w-full"
-                    min="1"
-                    max="50"
-                    step="1"
-                  />
-                  <p className="text-xs text-muted-foreground">Pause new entries when balance drops this % from session peak</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="resumeAtDrawdownPercent">Resume At Drawdown (%)</Label>
-                  <NumberInput
-                    id="resumeAtDrawdownPercent"
-                    value={config.global.accountHealth?.resumeAtDrawdownPercent ?? ''}
-                    onChange={(value) =>
-                      handleGlobalChange('accountHealth', {
-                        ...config.global.accountHealth,
-                        resumeAtDrawdownPercent: typeof value === 'number' ? Math.max(0, Math.min(49, value)) : 15
-                      })
-                    }
-                    defaultValue={15}
-                    className="w-full"
-                    min="0"
-                    max="49"
-                    step="1"
-                  />
-                  <p className="text-xs text-muted-foreground">Resume trading when drawdown recovers below this % (hysteresis)</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxUnrealizedLossPercent">Max Unrealized Loss (%)</Label>
-                  <NumberInput
-                    id="maxUnrealizedLossPercent"
-                    value={config.global.accountHealth?.maxUnrealizedLossPercent ?? ''}
-                    onChange={(value) =>
-                      handleGlobalChange('accountHealth', {
-                        ...config.global.accountHealth,
-                        maxUnrealizedLossPercent: typeof value === 'number' ? Math.max(1, Math.min(50, value)) : 20
-                      })
-                    }
-                    defaultValue={20}
-                    className="w-full"
-                    min="1"
-                    max="50"
-                    step="1"
-                  />
-                  <p className="text-xs text-muted-foreground">Pause if total unrealized losses exceed this % of balance</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="checkIntervalSeconds">Check Interval (sec)</Label>
-                  <NumberInput
-                    id="checkIntervalSeconds"
-                    value={config.global.accountHealth?.checkIntervalSeconds ?? ''}
-                    onChange={(value) =>
-                      handleGlobalChange('accountHealth', {
-                        ...config.global.accountHealth,
-                        checkIntervalSeconds: typeof value === 'number' ? Math.max(10, Math.min(300, value)) : 60
-                      })
-                    }
-                    defaultValue={60}
-                    className="w-full"
-                    min="10"
-                    max="300"
-                    step="10"
-                  />
-                  <p className="text-xs text-muted-foreground">How often to check account health</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="closeAllAtDrawdownPercent">Emergency Close-All (%)</Label>
-                <div className="flex items-center space-x-4">
-                  <NumberInput
-                    id="closeAllAtDrawdownPercent"
-                    value={config.global.accountHealth?.closeAllAtDrawdownPercent ?? ''}
-                    onChange={(value) =>
-                      handleGlobalChange('accountHealth', {
-                        ...config.global.accountHealth,
-                        closeAllAtDrawdownPercent: typeof value === 'number' ? Math.max(0, Math.min(80, value)) : 0
-                      })
-                    }
-                    defaultValue={0}
-                    className="w-24"
-                    min="0"
-                    max="80"
-                    step="5"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    Close ALL positions at this drawdown (0 = disabled)
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground text-red-500">
-                  ⚠️ Nuclear option — closes everything at market. Set to 0 to disable.
-                </p>
-              </div>
-
-              {/* DCA Guardrails */}
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                  🛡️ DCA Guardrails
-                  <span className="text-xs text-muted-foreground font-normal">— Hard limits on position growth</span>
-                </h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="maxPositionNotional">Max Position Notional ($)</Label>
-                    <NumberInput
-                      id="maxPositionNotional"
-                      value={config.global.accountHealth?.maxPositionNotional ?? ''}
-                      onChange={(value) =>
-                        handleGlobalChange('accountHealth', {
-                          ...config.global.accountHealth,
-                          maxPositionNotional: typeof value === 'number' ? Math.max(0, value) : 0
-                        })
-                      }
-                      defaultValue={0}
-                      className="w-full"
-                      min="0"
-                      max="10000"
-                      step="5"
-                    />
-                    <p className="text-xs text-muted-foreground">Stop DCA when position notional value reaches this cap (0 = unlimited)</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxDCAEntries">Max DCA Entries</Label>
-                    <NumberInput
-                      id="maxDCAEntries"
-                      value={config.global.accountHealth?.maxDCAEntries ?? ''}
-                      onChange={(value) =>
-                        handleGlobalChange('accountHealth', {
-                          ...config.global.accountHealth,
-                          maxDCAEntries: typeof value === 'number' ? Math.max(0, Math.round(value)) : 0
-                        })
-                      }
-                      defaultValue={0}
-                      className="w-full"
-                      min="0"
-                      max="100"
-                      step="1"
-                    />
-                    <p className="text-xs text-muted-foreground">Max number of DCA entries per position (0 = unlimited)</p>
-                  </div>
-                </div>
-              </div>
-
-              <Alert>
-                <Heart className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>How it works:</strong> Tracks your session peak balance (high water mark). 
-                  When total balance drops {config.global.accountHealth?.maxDrawdownPercent || 25}% from peak OR unrealized losses 
-                  exceed {config.global.accountHealth?.maxUnrealizedLossPercent || 20}% of balance, new entries are paused (DCA still allowed). 
-                  Trading resumes when drawdown recovers below {config.global.accountHealth?.resumeAtDrawdownPercent || 15}%.
-                  {(config.global.accountHealth?.closeAllAtDrawdownPercent || 0) > 0 
-                    ? ` Emergency close-all triggers at ${config.global.accountHealth?.closeAllAtDrawdownPercent}% drawdown.` 
-                    : ''}
-                  {(config.global.accountHealth?.maxPositionNotional || 0) > 0 || (config.global.accountHealth?.maxDCAEntries || 0) > 0
-                    ? ' DCA guardrails limit individual position growth even when DCA is allowed.'
-                    : ''}
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-
-          {/* Adaptive Thresholds Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4" />
                 Adaptive Thresholds
               </CardTitle>
-              <CardDescription>
-                Automatically adjust liquidation volume thresholds based on recent market activity. When enabled, thresholds adapt to target a specific percentile of recent liquidation volumes — higher percentile means only responding to larger events.
-              </CardDescription>
+              <CardDescription>Automatically adjust per-symbol liq volume thresholds based on recent market activity</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Enable Adaptive Thresholds</Label>
-                  <p className="text-xs text-muted-foreground">Adjusts thresholds within bounds around your configured values</p>
+                  <p className="text-xs text-muted-foreground">Adjusts thresholds within ±bounds around your configured values</p>
                 </div>
-                <Switch
-                  checked={config.global.adaptiveThresholds?.enabled === true}
-                  onCheckedChange={(checked) =>
-                    handleGlobalChange('adaptiveThresholds', {
-                      ...config.global.adaptiveThresholds,
-                      enabled: checked,
-                    })
-                  }
-                />
+                <Switch checked={config.global.adaptiveThresholds?.enabled === true} onCheckedChange={(checked) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, enabled: checked })} />
               </div>
 
               {config.global.adaptiveThresholds?.enabled && (
-                <div className="space-y-4 border-t pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="targetPercentile">Target Percentile</Label>
-                      <NumberInput
-                        id="targetPercentile"
-                        value={config.global.adaptiveThresholds?.targetPercentile ?? 80}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            targetPercentile: typeof value === 'number' ? Math.max(50, Math.min(99, value)) : 80,
-                          })
-                        }
-                        defaultValue={80}
-                        className="w-24"
-                        min="50"
-                        max="99"
-                        step="5"
-                      />
-                      <p className="text-xs text-muted-foreground">P80 = trigger on top 20% of liquidations. Higher = stricter.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lookbackHours">Lookback Hours</Label>
-                      <NumberInput
-                        id="lookbackHours"
-                        value={config.global.adaptiveThresholds?.lookbackHours ?? 24}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            lookbackHours: typeof value === 'number' ? Math.max(1, Math.min(168, value)) : 24,
-                          })
-                        }
-                        defaultValue={24}
-                        className="w-24"
-                        min="1"
-                        max="168"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">Hours of data to analyze (1-168)</p>
-                    </div>
+                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                  <div className="space-y-1.5">
+                    <Label>Target Percentile</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.targetPercentile ?? 80} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, targetPercentile: typeof v === 'number' ? Math.max(50, Math.min(99, v)) : 80 })} defaultValue={80} className="w-24" min="50" max="99" step="5" />
+                    <p className="text-xs text-muted-foreground">P80 = top 20% of liquidations only</p>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="updateInterval">Update Interval (min)</Label>
-                      <NumberInput
-                        id="updateInterval"
-                        value={config.global.adaptiveThresholds?.updateIntervalMinutes ?? 15}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            updateIntervalMinutes: typeof value === 'number' ? Math.max(5, Math.min(60, value)) : 15,
-                          })
-                        }
-                        defaultValue={15}
-                        className="w-24"
-                        min="5"
-                        max="60"
-                        step="5"
-                      />
-                      <p className="text-xs text-muted-foreground">Minutes between recalculations</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smoothingFactor">Smoothing Factor</Label>
-                      <NumberInput
-                        id="smoothingFactor"
-                        value={config.global.adaptiveThresholds?.smoothingFactor ?? 0.3}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            smoothingFactor: typeof value === 'number' ? Math.max(0.1, Math.min(1.0, value)) : 0.3,
-                          })
-                        }
-                        defaultValue={0.3}
-                        className="w-24"
-                        min="0.1"
-                        max="1"
-                        step="0.1"
-                      />
-                      <p className="text-xs text-muted-foreground">Lower = smoother changes (0.1-1.0)</p>
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label>Lookback Hours</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.lookbackHours ?? 24} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, lookbackHours: typeof v === 'number' ? Math.max(1, Math.min(168, v)) : 24 })} defaultValue={24} className="w-24" min="1" max="168" step="1" />
+                    <p className="text-xs text-muted-foreground">Hours of history to analyze</p>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="maxAdjustmentPercent">Max Adjustment %</Label>
-                      <NumberInput
-                        id="maxAdjustmentPercent"
-                        value={config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            maxAdjustmentPercent: typeof value === 'number' ? Math.max(10, Math.min(200, value)) : 50,
-                          })
-                        }
-                        defaultValue={50}
-                        className="w-24"
-                        min="10"
-                        max="200"
-                        step="10"
-                      />
-                      <p className="text-xs text-muted-foreground">Max % deviation from your static config value</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="minSamples">Min Samples</Label>
-                      <NumberInput
-                        id="minSamples"
-                        value={config.global.adaptiveThresholds?.minSamples ?? 20}
-                        onChange={(value) =>
-                          handleGlobalChange('adaptiveThresholds', {
-                            ...config.global.adaptiveThresholds,
-                            minSamples: typeof value === 'number' ? Math.max(1, value) : 20,
-                          })
-                        }
-                        defaultValue={20}
-                        className="w-24"
-                        min="1"
-                        step="5"
-                      />
-                      <p className="text-xs text-muted-foreground">Minimum liquidations before adapting (below = use static)</p>
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label>Update Interval (min)</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.updateIntervalMinutes ?? 15} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, updateIntervalMinutes: typeof v === 'number' ? Math.max(5, Math.min(60, v)) : 15 })} defaultValue={15} className="w-24" min="5" max="60" step="5" />
+                    <p className="text-xs text-muted-foreground">Minutes between recalculations</p>
                   </div>
-
-                  <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                  <div className="space-y-1.5">
+                    <Label>Smoothing Factor</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.smoothingFactor ?? 0.3} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, smoothingFactor: typeof v === 'number' ? Math.max(0.1, Math.min(1.0, v)) : 0.3 })} defaultValue={0.3} className="w-24" min="0.1" max="1" step="0.1" />
+                    <p className="text-xs text-muted-foreground">Lower = smoother changes (0.1–1.0)</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Max Adjustment %</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, maxAdjustmentPercent: typeof v === 'number' ? Math.max(10, Math.min(200, v)) : 50 })} defaultValue={50} className="w-24" min="10" max="200" step="10" />
+                    <p className="text-xs text-muted-foreground">Max % deviation from static config values</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Min Samples</Label>
+                    <NumberInput value={config.global.adaptiveThresholds?.minSamples ?? 20} onChange={(v) => handleGlobalChange('adaptiveThresholds', { ...config.global.adaptiveThresholds, minSamples: typeof v === 'number' ? Math.max(1, v) : 20 })} defaultValue={20} className="w-24" min="1" step="5" />
+                    <p className="text-xs text-muted-foreground">Minimum liquidations before adapting</p>
+                  </div>
+                  <Alert className="col-span-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20">
                     <AlertDescription className="text-xs">
-                      📊 Thresholds adapt within ±{config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50}% of your per-symbol config values.
-                      Uses the p{config.global.adaptiveThresholds?.targetPercentile ?? 80} of liquidation volumes from the last {config.global.adaptiveThresholds?.lookbackHours ?? 24}h.
-                      If there aren&apos;t enough samples ({config.global.adaptiveThresholds?.minSamples ?? 20}+), static config values are used.
-                      View live threshold adjustments on the Analytics page.
+                      📊 Thresholds adapt within ±{config.global.adaptiveThresholds?.maxAdjustmentPercent ?? 50}% of per-symbol values · p{config.global.adaptiveThresholds?.targetPercentile ?? 80} over {config.global.adaptiveThresholds?.lookbackHours ?? 24}h · Falls back to static if &lt;{config.global.adaptiveThresholds?.minSamples ?? 20} samples
                     </AlertDescription>
                   </Alert>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* ── 7. SERVER & DATA ─────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Settings2 className="h-4 w-4" />
+                Server Settings
+              </CardTitle>
+              <CardDescription>Dashboard security and network configuration</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="dashboardPassword">Dashboard Password</Label>
+                  <Input id="dashboardPassword" type="password" value={config.global.server?.dashboardPassword || ''} onChange={(e) => handleGlobalChange('server', { ...config.global.server, dashboardPassword: e.target.value })} placeholder="Min 4 characters" minLength={4} />
+                  {config.global.server?.dashboardPassword && config.global.server.dashboardPassword.length > 0 && config.global.server.dashboardPassword.length < 4 && (
+                    <p className="text-xs text-destructive">Min 4 characters</p>
+                  )}
+                </div>
+                <div />
+                <div className="space-y-1.5">
+                  <Label htmlFor="dashboardPort">Dashboard Port</Label>
+                  <NumberInput id="dashboardPort" value={config.global.server?.dashboardPort ?? ''} onChange={(v) => handleGlobalChange('server', { ...config.global.server, dashboardPort: v })} defaultValue={3000} className="w-full" min="1024" max="65535" />
+                  <p className="text-xs text-muted-foreground">Web UI port (default: 3000)</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="websocketPort">WebSocket Port</Label>
+                  <NumberInput id="websocketPort" value={config.global.server?.websocketPort ?? ''} onChange={(v) => handleGlobalChange('server', { ...config.global.server, websocketPort: v })} defaultValue={8080} className="w-full" min="1024" max="65535" />
+                  <p className="text-xs text-muted-foreground">Bot WS port (default: 8080)</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Switch id="useRemoteWebSocket" checked={config.global.server?.useRemoteWebSocket || false} onCheckedChange={(checked) => handleGlobalChange('server', { ...config.global.server, useRemoteWebSocket: checked })} />
+                  <Label htmlFor="useRemoteWebSocket" className="cursor-pointer">Enable Remote WebSocket Access</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">Allow dashboard to connect to the bot from other devices on your network</p>
+                {config.global.server?.useRemoteWebSocket && (
+                  <div className="space-y-1.5 pl-6">
+                    <Label>WebSocket Host (Optional)</Label>
+                    <Input type="text" value={config.global.server?.websocketHost || ''} onChange={(e) => handleGlobalChange('server', { ...config.global.server, websocketHost: e.target.value || null })} placeholder="Auto-detect from browser (recommended)" />
+                    <p className="text-xs text-muted-foreground">Leave empty to auto-detect. Only set if you need a specific IP.</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Database className="h-4 w-4" />
+                Liquidation Database
+              </CardTitle>
+              <CardDescription>How long to retain historical liquidation data</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Data Retention (Days)</Label>
+                  <NumberInput value={config.global.liquidationDatabase?.retentionDays ?? ''} onChange={(v) => handleGlobalChange('liquidationDatabase', { ...config.global.liquidationDatabase, retentionDays: typeof v === 'number' ? Math.max(0, v) : 90 })} defaultValue={90} className="w-full" min="0" max="3650" step="1" />
+                  <p className="text-xs text-muted-foreground">Days to keep data (0 = keep forever)</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cleanup Interval (Hours)</Label>
+                  <NumberInput value={config.global.liquidationDatabase?.cleanupIntervalHours ?? ''} onChange={(v) => handleGlobalChange('liquidationDatabase', { ...config.global.liquidationDatabase, cleanupIntervalHours: typeof v === 'number' ? Math.max(1, v) : 24 })} defaultValue={24} className="w-full" min="1" max="168" step="1" />
+                  <p className="text-xs text-muted-foreground">How often to run cleanup (default: 24h)</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
         </TabsContent>
 
         <TabsContent value="symbols" className="space-y-4" onFocus={fetchAvailableSymbols}>

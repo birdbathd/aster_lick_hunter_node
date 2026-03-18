@@ -682,7 +682,11 @@ class TradeHistoryDb {
         SUM(CASE WHEN income_type = 'COMMISSION'         THEN CAST(income AS REAL) ELSE 0 END) AS commission,
         SUM(CASE WHEN income_type = 'FUNDING_FEE'        THEN CAST(income AS REAL) ELSE 0 END) AS funding,
         SUM(CASE WHEN income_type = 'APOLLOX_DEX_REBATE' THEN CAST(income AS REAL) ELSE 0 END) AS rebates,
-        SUM(CAST(income AS REAL))                                                               AS net,
+        SUM(CASE WHEN income_type IN (
+          'REALIZED_PNL', 'COMMISSION', 'FUNDING_FEE',
+          'APOLLOX_DEX_REBATE', 'MARKET_MERCHANT_RETURN_REWARD',
+          'USDF_BASE_REWARD', 'INSURANCE_CLEAR'
+        ) THEN CAST(income AS REAL) ELSE 0 END)                                                 AS net,
         COUNT(DISTINCT CASE WHEN income_type = 'REALIZED_PNL' THEN trade_id END)               AS trade_count
       FROM income_history
       WHERE asset = 'USDT' AND time >= ?

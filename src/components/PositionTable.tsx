@@ -726,6 +726,13 @@ export default function PositionTable({
                     ? position.markPrice * (1 - position.tpPriceRate / 100)
                     : position.markPrice * (1 + position.tpPriceRate / 100)
                   : null;
+                // Guaranteed minimum profit when trail stop is locked in profit
+                const mobileTrailLockPrice = (mobileTrailingTP?.activated ? mobileTrailingTP.trailStopPrice : null) ?? liveExchangeTrailStopMobile;
+                const mobileGuaranteedPnl = mobileTrailLockPrice != null
+                  ? position.side === 'LONG'
+                    ? (mobileTrailLockPrice - position.entryPrice) * position.quantity
+                    : (position.entryPrice - mobileTrailLockPrice) * position.quantity
+                  : null;
                 const mobileFundingRate = fundingRates[position.symbol];
                 const isMobileFundingAdverse = mobileFundingRate && (
                   (position.side === 'LONG' && mobileFundingRate.direction === 'longs_pay') ||
@@ -759,13 +766,18 @@ export default function PositionTable({
                     </div>
 
                     {/* PnL - Large and prominent */}
-                    <div className="flex items-baseline gap-2">
+                    <div className="flex items-baseline gap-2 flex-wrap">
                       <span className={`text-lg font-bold ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {position.pnl >= 0 ? '+' : '-'}${Math.abs(position.pnl).toFixed(2)}
                       </span>
                       <Badge variant={position.pnl >= 0 ? "outline" : "destructive"} className={`h-4 text-[10px] ${position.pnl >= 0 ? 'border-green-600 text-green-600' : ''}`}>
                         {position.pnlPercent >= 0 ? '+' : ''}{(position.pnlPercent || 0).toFixed(1)}%
                       </Badge>
+                      {mobileGuaranteedPnl != null && mobileGuaranteedPnl > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-mono" title="Minimum locked-in profit if trail stop holds">
+                          🔒+${mobileGuaranteedPnl.toFixed(2)}
+                        </span>
+                      )}
                     </div>
 
                     {/* Position Details Grid */}
@@ -973,6 +985,13 @@ export default function PositionTable({
                   ? position.markPrice * (1 - position.tpPriceRate / 100)
                   : position.markPrice * (1 + position.tpPriceRate / 100)
                 : null;
+              // Guaranteed minimum profit when trail stop is locked past entry
+              const trailLockPrice = (trailingTP?.activated ? trailingTP.trailStopPrice : null) ?? liveExchangeTrailStop;
+              const guaranteedPnl = trailLockPrice != null
+                ? position.side === 'LONG'
+                  ? (trailLockPrice - position.entryPrice) * position.quantity
+                  : (position.entryPrice - trailLockPrice) * position.quantity
+                : null;
               const fundingRate = fundingRates[position.symbol];
               const isFundingAdverse = fundingRate && (
                 (position.side === 'LONG' && fundingRate.direction === 'longs_pay') ||
@@ -1089,6 +1108,11 @@ export default function PositionTable({
                       >
                         {position.pnlPercent >= 0 ? '+' : ''}{(position.pnlPercent || 0).toFixed(1)}%
                       </Badge>
+                      {guaranteedPnl != null && guaranteedPnl > 0 && (
+                        <span className="text-[9px] text-emerald-400 font-mono" title="Minimum locked-in profit if trail stop holds">
+                          🔒+${guaranteedPnl.toFixed(2)}
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-center py-2">

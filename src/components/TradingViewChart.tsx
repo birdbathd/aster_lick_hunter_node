@@ -381,16 +381,16 @@ export default function TradingViewChart({
             positionLinesRef.current.push(activationLine);
           }
 
-          if (liveTrailStop > 0) {
+          // Only show the live trail stop line once activated — before activation
+          // the exchange stop price is a stale reference and is misleading on the chart.
+          if (isActivated && liveTrailStop > 0) {
             const trailLine = candlestickSeriesRef.current!.createPriceLine({
               price: liveTrailStop,
-              color: isActivated ? '#22c55e' : '#a855f7', // Green when active, purple when pending
+              color: '#22c55e',
               lineWidth: 2,
               lineStyle: 0, // Solid
               axisLabelVisible: true,
-              title: isActivated
-                ? `Trail Stop: ${liveTrailStop.toFixed(liveTrailStop < 1 ? 5 : 2)} (-${callbackRate}% live)`
-                : `Trail Stop: ${liveTrailStop.toFixed(liveTrailStop < 1 ? 5 : 2)} (-${callbackRate}% cb)`,
+              title: `Trail Stop: ${liveTrailStop.toFixed(liveTrailStop < 1 ? 5 : 2)} (-${callbackRate}% live)`,
             });
             positionLinesRef.current.push(trailLine);
           }

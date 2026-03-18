@@ -803,7 +803,7 @@ export default function PositionTable({
                           <Shield className="h-3 w-3 mr-0.5" />SL
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-muted-foreground">
+                        <Badge variant="outline" className="h-5 text-[10px] px-1.5 border-red-600 text-red-600 bg-red-600/10">
                           <Shield className="h-3 w-3 mr-0.5" />No SL
                         </Badge>
                       )}
@@ -826,7 +826,7 @@ export default function PositionTable({
                           )}
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-muted-foreground">
+                        <Badge variant="outline" className="h-5 text-[10px] px-1.5 border-amber-500 text-amber-500 bg-amber-500/10">
                           <Target className="h-3 w-3 mr-0.5" />No TP
                         </Badge>
                       )}
@@ -1103,8 +1103,8 @@ export default function PositionTable({
                                     <Shield className="h-3 w-3 text-green-600" />
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="h-5 w-5 p-0">
-                                    <Shield className="h-3 w-3 text-muted-foreground" />
+                                  <Badge variant="outline" className="h-5 w-5 p-0 border-red-600 bg-red-600/10">
+                                    <Shield className="h-3 w-3 text-red-600" />
                                   </Badge>
                                 )}
                                 {position.hasTakeProfit ? (
@@ -1124,8 +1124,8 @@ export default function PositionTable({
                                     )}
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="h-5 w-5 p-0">
-                                    <Target className="h-3 w-3 text-muted-foreground" />
+                                  <Badge variant="outline" className="h-5 w-5 p-0 border-amber-500 bg-amber-500/10">
+                                    <Target className="h-3 w-3 text-amber-500" />
                                   </Badge>
                                 )}
                                 {hasVwapProtection && vwap ? (

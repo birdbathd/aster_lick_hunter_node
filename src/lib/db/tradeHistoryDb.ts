@@ -664,6 +664,44 @@ class TradeHistoryDb {
   }
 
   /**
+   * Daily net P&L from income_history for the last N days (for balance trend chart)
+   */
+  getDailyTrend(cutoffMs: number): Array<{
+    date: string;
+    realizedPnl: number;
+    commission: number;
+    funding: number;
+    rebates: number;
+    net: number;
+    tradeCount: number;
+  }> {
+    const rows = this.db.prepare(`
+      SELECT
+        date(time / 1000, 'unixepoch') AS day,
+        SUM(CASE WHEN income_type = 'REALIZED_PNL'      THEN CAST(income AS REAL) ELSE 0 END) AS realized_pnl,
+        SUM(CASE WHEN income_type = 'COMMISSION'         THEN CAST(income AS REAL) ELSE 0 END) AS commission,
+        SUM(CASE WHEN income_type = 'FUNDING_FEE'        THEN CAST(income AS REAL) ELSE 0 END) AS funding,
+        SUM(CASE WHEN income_type = 'APOLLOX_DEX_REBATE' THEN CAST(income AS REAL) ELSE 0 END) AS rebates,
+        SUM(CAST(income AS REAL))                                                               AS net,
+        COUNT(DISTINCT CASE WHEN income_type = 'REALIZED_PNL' THEN trade_id END)               AS trade_count
+      FROM income_history
+      WHERE asset = 'USDT' AND time >= ?
+      GROUP BY day
+      ORDER BY day ASC
+    `).all(cutoffMs) as any[];
+
+    return rows.map(r => ({
+      date: r.day as string,
+      realizedPnl: r.realized_pnl ?? 0,
+      commission: r.commission ?? 0,
+      funding: r.funding ?? 0,
+      rebates: r.rebates ?? 0,
+      net: r.net ?? 0,
+      tradeCount: r.trade_count ?? 0,
+    }));
+  }
+
+  /**
    * Get total trade count (for stats)
    */
   getTradeCount(filter?: { symbol?: string; status?: string }): number {

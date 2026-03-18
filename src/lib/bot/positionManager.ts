@@ -83,6 +83,8 @@ export class PositionManager extends EventEmitter implements PositionTracker {
   private keepaliveInterval?: NodeJS.Timeout;
   private riskCheckInterval?: NodeJS.Timeout;
   private orderCheckInterval?: NodeJS.Timeout;
+  private positionSyncInterval?: NodeJS.Timeout;
+  private stalePriceTriggeredSync: Set<string> = new Set(); // Prevent repeated syncs for same stale symbol
   private isRunning = false;
   private statusBroadcaster: any; // Will be injected
   private isHedgeMode: boolean;
@@ -173,6 +175,9 @@ logWithTimestamp('PositionManager: Restarting connection due to mode change...')
     if (this.orderCheckInterval) {
       clearInterval(this.orderCheckInterval);
     }
+    if (this.positionSyncInterval) {
+      clearInterval(this.positionSyncInterval);
+    }
 
     // Wait a bit before reconnecting
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -225,6 +230,7 @@ logWithTimestamp('PositionManager: Stopping...');
     if (this.keepaliveInterval) clearInterval(this.keepaliveInterval);
     if (this.riskCheckInterval) clearInterval(this.riskCheckInterval);
     if (this.orderCheckInterval) clearInterval(this.orderCheckInterval);
+    if (this.positionSyncInterval) clearInterval(this.positionSyncInterval);
     if (this.ws) this.ws.close();
     if (this.listenKey) await this.closeUserDataStream();
   }
@@ -251,11 +257,26 @@ logWithTimestamp('PositionManager WS connected');
       // Order check every 30 seconds to ensure SL/TP quantities match positions
       this.orderCheckInterval = setInterval(() => this.checkAndAdjustOrders(), 30 * 1000);
 
-      // Clean up orphaned orders immediately on startup, then every 30 seconds
+      // Full position reconciliation against exchange every 5 minutes.
+      // This is the primary defence against ghost positions caused by missed
+      // USER_DATA_STREAM events (e.g. position closed while stream was unhealthy).
+      // Offset by 2.5 min so it doesn't collide with riskCheck or orderCheck.
+      setTimeout(() => {
+        this.positionSyncInterval = setInterval(() => {
+          this.syncWithExchange().catch(err => {
+logErrorWithTimestamp('PositionManager: Periodic position sync failed:', err);
+          });
+        }, 5 * 60 * 1000);
+      }, 2.5 * 60 * 1000);
+
+      // Clean up orphaned orders immediately on startup, then every 30 seconds.
+      // Offset by 15s from orderCheckInterval so they never fire simultaneously.
       this.cleanupOrphanedOrders().catch(error => {
 logErrorWithTimestamp('PositionManager: Initial cleanup failed:', error);
       });
-      setInterval(() => this.cleanupOrphanedOrders(), 30 * 1000);
+      setTimeout(() => {
+        setInterval(() => this.cleanupOrphanedOrders(), 30 * 1000);
+      }, 15 * 1000);
     });
 
     this.ws.on('message', (data: Buffer) => {
@@ -347,6 +368,9 @@ logErrorWithTimestamp('PositionManager: Close stream error:', error);
   // Sync with exchange on startup or reconnection
   private async syncWithExchange(): Promise<void> {
 logWithTimestamp('PositionManager: Syncing with exchange...');
+
+    // Reset stale-price sync triggers so they can fire again after this sync
+    this.stalePriceTriggeredSync.clear();
 
     try {
       // Get all current positions from exchange
@@ -2487,6 +2511,22 @@ logErrorWithTimestamp(`PositionManager: Failed to cancel orphaned order ${order.
             }
           }
         }
+
+        // After cancelling orphaned orders, purge the stale positionOrders entries
+        // for those symbols so the protective-order monitor doesn't immediately re-place them.
+        for (const symbol of orphanedBySymbol.keys()) {
+          const symbolHasRealPosition = symbolPositionDetails.has(symbol);
+          if (!symbolHasRealPosition) {
+            // No position on exchange at all — remove all tracked order keys for this symbol
+            for (const key of [...this.positionOrders.keys()]) {
+              if (key.startsWith(`${symbol}_`)) {
+logWithTimestamp(`PositionManager: Purging stale positionOrders entry ${key} — no corresponding exchange position`);
+                this.positionOrders.delete(key);
+                this.currentPositions.delete(key);
+              }
+            }
+          }
+        }
       }
 
       // Cancel duplicate orders
@@ -2589,6 +2629,16 @@ logWithTimestamp(`PositionManager: Checking ${this.currentPositions.size} positi
             markPrice = parseFloat(priceData.markPrice);
           } else {
 logWithTimestamp(`PositionManager: WebSocket mark price stale for ${symbol} (${priceAge}ms old), fetching from API`);
+            // If price has been stale for >1 hour, the symbol is almost certainly
+            // dormant on this exchange. Trigger a full position sync to catch any
+            // ghost positions (e.g. position closed while stream was unhealthy).
+            if (priceAge > 60 * 60 * 1000 && !this.stalePriceTriggeredSync.has(symbol)) {
+              this.stalePriceTriggeredSync.add(symbol);
+logWithTimestamp(`PositionManager: Price stale >1hr for ${symbol} — triggering position reconciliation`);
+              this.syncWithExchange().catch(err => {
+logErrorWithTimestamp(`PositionManager: Reconciliation triggered by stale ${symbol} price failed:`, err);
+              });
+            }
           }
         }
 

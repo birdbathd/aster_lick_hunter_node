@@ -1,21 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { 
-  TrendingUp, 
-  TrendingDown, 
   AlertTriangle,
   CheckCircle2,
   XCircle,
   ChevronDown,
   Gauge,
   ArrowUpDown,
-  Filter,
-  Info,
 } from 'lucide-react';
 import websocketService from '@/lib/services/websocketService';
 import { cn } from '@/lib/utils';
@@ -271,194 +264,139 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
   };
 
   return (
-    <Card className={cn("bg-card/50 backdrop-blur-sm border-border/50", className)}>
-      <CardHeader className="pb-2">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center justify-between w-full hover:opacity-80 transition-opacity"
-        >
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-primary" />
-            Signal Feed
-            <Badge variant="secondary" className="h-5 text-xs px-1.5">
-              {recentOpportunities.length}
-            </Badge>
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {/* Compact stats always visible */}
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-green-400 font-medium">{taken.length}&#x2713;</span>
-              <span className="text-muted-foreground">/</span>
-              <span className="text-red-400 font-medium">{skipped.length}&#x2717;</span>
-              {avgScore > 0 && (
-                <>
-                  <span className="text-muted-foreground">&middot;</span>
-                  <span className={cn(
-                    "font-medium",
-                    avgScore >= 2 ? "text-green-400" : avgScore >= 1 ? "text-blue-400" : "text-yellow-400"
-                  )}>
-                    Q{avgScore.toFixed(1)}
-                  </span>
-                </>
-              )}
-            </div>
-            <Badge
-              variant={isConnected ? (isPassiveMode ? "outline" : "default") : "secondary"}
-              className={cn(
-                "text-[10px] h-4",
-                isPassiveMode && isConnected && "border-yellow-500 text-yellow-500"
-              )}
-            >
-              {isConnected ? (isPassiveMode ? 'Passive' : 'Live') : 'Off'}
-            </Badge>
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform text-muted-foreground", !isExpanded && '-rotate-90')} />
-          </div>
-        </button>
-      </CardHeader>
+    <div className={cn("rounded-lg border bg-card overflow-hidden", className)}>
+
+      {/* Header row — click to expand */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors border-b border-transparent data-[open=true]:border-border text-left"
+        data-open={isExpanded}
+      >
+        <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium">Signal Feed</span>
+        <span className="text-xs text-muted-foreground">{recentOpportunities.length}</span>
+
+        <div className="flex items-center gap-2 ml-auto text-xs">
+          <span className="text-green-400 tabular-nums">{taken.length}✓</span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-red-400 tabular-nums">{skipped.length}✗</span>
+          {avgScore > 0 && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className={cn("tabular-nums", avgScore >= 2 ? "text-green-400" : avgScore >= 1 ? "text-blue-400" : "text-yellow-400")}>
+                Q{avgScore.toFixed(1)}
+              </span>
+            </>
+          )}
+          <span className={cn(
+            "text-[9px] px-1.5 py-0.5 rounded font-medium",
+            isConnected
+              ? isPassiveMode ? "bg-yellow-500/15 text-yellow-400" : "bg-green-500/15 text-green-400"
+              : "bg-muted text-muted-foreground"
+          )}>
+            {isConnected ? (isPassiveMode ? 'Passive' : 'Live') : 'Off'}
+          </span>
+          <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+        </div>
+      </button>
 
       {isExpanded && (
-        <CardContent className="pt-0 space-y-3">
-          {/* FTA Alerts - Always visible when present */}
+        <div className="divide-y divide-border/30">
+
+          {/* FTA alerts */}
           {ftaAlerts.length > 0 && (
-            <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-              <div className="flex items-center gap-2 text-yellow-400 mb-1">
+            <div className="px-3 py-2 bg-yellow-500/5 border-b border-yellow-500/20">
+              <div className="flex items-center gap-1.5 text-[10px] text-yellow-400 mb-1">
                 <AlertTriangle className="h-3 w-3 animate-pulse" />
-                <span className="text-xs font-medium">Early Exit Signals</span>
+                <span className="font-medium uppercase tracking-wide">Early Exit</span>
               </div>
               {ftaAlerts.map((alert, idx) => (
-                <div key={`fta-${alert.timestamp}-${idx}`} className="text-xs flex items-center justify-between">
-                  <span><span className="font-medium">{alert.symbol}</span> &mdash; {alert.reason}</span>
-                  <span className="text-muted-foreground ml-2">{formatTime(alert.timestamp)}</span>
+                <div key={`fta-${alert.timestamp}-${idx}`} className="text-[10px] flex items-center justify-between text-muted-foreground">
+                  <span><span className="text-foreground font-medium">{alert.symbol}</span> — {alert.reason}</span>
+                  <span className="ml-3 tabular-nums">{formatTime(alert.timestamp)}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Filter tabs */}
-          <div className="flex items-center gap-1">
+          {/* Filter tabs + stats toggle */}
+          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border/30">
             {(['ALL', 'TAKEN', 'SKIPPED'] as SignalFilter[]).map(f => (
-              <Button
+              <button
                 key={f}
-                variant={filter === f ? 'default' : 'ghost'}
-                size="sm"
-                className={cn("h-6 text-[10px] px-2", filter === f && f === 'TAKEN' && 'bg-green-600 hover:bg-green-700', filter === f && f === 'SKIPPED' && 'bg-red-600 hover:bg-red-700')}
                 onClick={() => setFilter(f)}
+                className={cn(
+                  "text-[10px] px-2 py-0.5 rounded transition-colors",
+                  filter === f
+                    ? f === 'TAKEN' ? "bg-green-500/20 text-green-400"
+                      : f === 'SKIPPED' ? "bg-red-500/20 text-red-400"
+                      : "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                <Filter className="h-2.5 w-2.5 mr-1" />
-                {f} {f === 'TAKEN' ? `(${taken.length})` : f === 'SKIPPED' ? `(${skipped.length})` : `(${recentOpportunities.length})`}
-              </Button>
+                {f} {f === 'ALL' ? recentOpportunities.length : f === 'TAKEN' ? taken.length : skipped.length}
+              </button>
             ))}
             {scoreBreakdown.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[10px] px-2 ml-auto text-muted-foreground"
+              <button
                 onClick={() => setShowScoreStats(v => !v)}
+                className="ml-auto text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
-                <ArrowUpDown className="h-2.5 w-2.5 mr-1" />
-                {showScoreStats ? 'Hide' : 'Stats'}
-              </Button>
+                <ArrowUpDown className="h-2.5 w-2.5" />
+                Stats
+              </button>
             )}
           </div>
 
-          {/* Score Performance Breakdown */}
+          {/* Score breakdown table */}
           {showScoreStats && scoreBreakdown.length > 0 && (() => {
             const maxPnl = Math.max(...scoreBreakdown.map(r => r.avgPnlPct));
             const scoreColors: Record<string, string> = {
-              STRONG: 'text-green-400 bg-green-500/15 border-green-500/30',
-              NORMAL: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
-              WEAK: 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30',
-              SKIP: 'text-red-400 bg-red-500/15 border-red-500/30',
+              STRONG: 'text-green-400', NORMAL: 'text-blue-400', WEAK: 'text-yellow-400', SKIP: 'text-red-400',
             };
             const barColors: Record<string, string> = {
-              STRONG: 'bg-green-500',
-              NORMAL: 'bg-blue-500',
-              WEAK: 'bg-yellow-500',
-              SKIP: 'bg-red-500',
+              STRONG: 'bg-green-500', NORMAL: 'bg-blue-500', WEAK: 'bg-yellow-500', SKIP: 'bg-red-500',
             };
             return (
-              <div className="rounded-lg border border-border/50 overflow-hidden">
-                {/* Header */}
-                <div className="grid grid-cols-[56px_1fr_44px_44px_44px] gap-0 px-2 py-1 bg-muted/30 border-b border-border/40">
-                  <span className="text-[9px] text-muted-foreground font-medium">Score</span>
-                  <span className="text-[9px] text-muted-foreground font-medium">Avg PnL %</span>
-                  <span className="text-[9px] text-muted-foreground font-medium text-right">Win%</span>
-                  <span className="text-[9px] text-muted-foreground font-medium text-right">MFE/MAE</span>
-                  <span className="text-[9px] text-muted-foreground font-medium text-right">Signals</span>
+              <div className="border-b border-border/30">
+                <div className="grid grid-cols-[52px_1fr_40px_44px_40px] px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide">
+                  <span>Score</span><span>Avg PnL</span><span className="text-right">Win%</span><span className="text-right">MFE/MAE</span><span className="text-right">Sigs</span>
                 </div>
-                {scoreBreakdown.map((row, i) => (
-                  <div
-                    key={row.score}
-                    className={cn(
-                      "grid grid-cols-[56px_1fr_44px_44px_44px] gap-0 px-2 py-1.5 items-center",
-                      i < scoreBreakdown.length - 1 && "border-b border-border/20"
-                    )}
-                  >
-                    {/* Score badge */}
-                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4 w-fit border font-mono", scoreColors[row.label])}>
-                      {row.score}/3
-                    </Badge>
-
-                    {/* PnL bar + value */}
+                {scoreBreakdown.map((row) => (
+                  <div key={row.score} className="grid grid-cols-[52px_1fr_40px_44px_40px] px-3 py-1.5 items-center border-t border-border/20 text-[10px]">
+                    <span className={cn("font-mono font-medium", scoreColors[row.label])}>{row.score}/3</span>
                     <div className="flex items-center gap-1.5 pr-2">
-                      <div className="flex-1 h-1.5 bg-muted/40 rounded-full overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full transition-all", barColors[row.label])}
-                          style={{ width: maxPnl > 0 ? `${(row.avgPnlPct / maxPnl) * 100}%` : '0%' }}
-                        />
+                      <div className="flex-1 h-1 bg-muted/40 rounded-full overflow-hidden">
+                        <div className={cn("h-full rounded-full", barColors[row.label])} style={{ width: maxPnl > 0 ? `${(row.avgPnlPct / maxPnl) * 100}%` : '0%' }} />
                       </div>
-                      <span className={cn("text-[10px] font-mono tabular-nums whitespace-nowrap", row.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400')}>
-                        +{row.avgPnlPct.toFixed(2)}%
-                      </span>
+                      <span className={cn("font-mono tabular-nums", row.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400')}>+{row.avgPnlPct.toFixed(2)}%</span>
                     </div>
-
-                    {/* Win rate */}
-                    <span className={cn(
-                      "text-[10px] font-mono tabular-nums text-right",
-                      row.winRate >= 95 ? 'text-green-400' : row.winRate >= 80 ? 'text-yellow-400' : 'text-red-400'
-                    )}>
-                      {row.winRate.toFixed(0)}%
-                    </span>
-
-                    {/* MFE/MAE ratio */}
-                    <span className={cn(
-                      "text-[10px] font-mono tabular-nums text-right",
-                      row.mfeMaeRatio >= 1.2 ? 'text-green-400' : row.mfeMaeRatio >= 0.8 ? 'text-yellow-400' : 'text-red-400'
-                    )}>
-                      {row.mfeMaeRatio.toFixed(2)}
-                    </span>
-
-                    {/* Signal count */}
-                    <div className="text-right">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-[10px] text-muted-foreground tabular-nums cursor-help">
-                            {row.signalCount.toLocaleString()}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="text-xs">
-                          <p className="font-semibold">{row.label} signals (all time)</p>
-                          <p>Executed: {row.executedCount}</p>
-                          <p>Skipped: {row.signalCount - row.executedCount}</p>
-                          <p>Closed trades with data: {row.trades}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                    <span className={cn("text-right font-mono tabular-nums", row.winRate >= 95 ? 'text-green-400' : row.winRate >= 80 ? 'text-yellow-400' : 'text-red-400')}>{row.winRate.toFixed(0)}%</span>
+                    <span className={cn("text-right font-mono tabular-nums", row.mfeMaeRatio >= 1.2 ? 'text-green-400' : row.mfeMaeRatio >= 0.8 ? 'text-yellow-400' : 'text-red-400')}>{row.mfeMaeRatio.toFixed(2)}</span>
+                    <span className="text-right text-muted-foreground tabular-nums">{row.signalCount}</span>
                   </div>
                 ))}
-                <div className="px-2 py-1 bg-muted/20 border-t border-border/30">
-                  <p className="text-[9px] text-muted-foreground">MFE/MAE = reward-to-pain ratio of closed trades. &gt;1 = moved more in your favour than against.</p>
-                </div>
               </div>
             );
           })()}
 
-          {/* Signal Feed */}
-          <div className="max-h-[320px] overflow-y-auto space-y-1">
+          {/* Signal rows — Aster-style flat table */}
+          <div className="max-h-[300px] overflow-y-auto">
+            {/* Column header */}
+            <div className="grid grid-cols-[16px_90px_64px_1fr_60px_56px_32px] gap-0 px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide sticky top-0">
+              <span></span>
+              <span>Symbol</span>
+              <span>Score</span>
+              <span>Reason</span>
+              <span className="text-right">Liq $</span>
+              <span className="text-right">Outcome</span>
+              <span className="text-right">Age</span>
+            </div>
+
             {filteredOpportunities.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">
-                {filter === 'ALL' ? 'Waiting for signals...' : `No ${filter.toLowerCase()} signals`}
-              </p>
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                {filter === 'ALL' ? 'Waiting for signals…' : `No ${filter.toLowerCase()} signals`}
+              </div>
             ) : (
               filteredOpportunities.map((opp, idx) => {
                 const outcome = getOutcome(opp);
@@ -469,182 +407,97 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                 return (
                   <div
                     key={`${opp.symbol}-${opp.timestamp}-${idx}`}
-                    className={cn(
-                      "rounded-lg border transition-all cursor-pointer",
-                      blocked ? "border-border/30 opacity-75" : "border-border/50"
-                    )}
+                    className={cn("border-t border-border/20 transition-colors cursor-pointer", isOpen ? "bg-accent/20" : "hover:bg-accent/10", blocked && "opacity-60")}
                     onClick={() => setExpandedSignal(isOpen ? null : idx)}
                   >
-                    {/* Compact row - always visible */}
-                    <div className="flex items-center gap-2 px-2.5 py-1.5">
-                      {/* Direction */}
-                      {opp.side === 'BUY' ? (
-                        <TrendingUp className="h-3 w-3 text-green-400 shrink-0" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />
-                      )}
+                    {/* Main row */}
+                    <div className="grid grid-cols-[16px_90px_64px_1fr_60px_56px_32px] gap-0 px-3 py-1.5 items-center text-xs">
 
-                      {/* Symbol + Price */}
-                      <span className="text-sm font-medium min-w-[80px]">{opp.symbol}</span>
-                      {opp.signalPrice && (
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          ${formatPrice(opp.signalPrice)}
-                        </span>
-                      )}
+                      {/* Direction dot */}
+                      <span className={opp.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
+                        {opp.side === 'BUY' ? '▲' : '▼'}
+                      </span>
 
-                      {/* Spacer */}
-                      <div className="flex-1" />
+                      {/* Symbol */}
+                      <span className="font-medium font-mono truncate">{opp.symbol.replace('USDT', '')}</span>
 
-                      {/* Quality score pill */}
-                      {qs && (
+                      {/* S/V/R score */}
+                      {qs ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className={cn(
-                              "text-[10px] font-mono px-1.5 rounded cursor-help",
-                              qs.totalScore >= 2 ? "text-green-400 bg-green-500/10" :
-                              qs.totalScore === 1 ? "text-yellow-400 bg-yellow-500/10" :
-                              "text-red-400 bg-red-500/10"
+                              "font-mono text-[10px] cursor-help",
+                              qs.totalScore >= 2 ? "text-green-400" : qs.totalScore === 1 ? "text-yellow-400" : "text-muted-foreground"
                             )}>
                               {qs.spikeScore}/{qs.volumeTrendScore}/{qs.regimeScore}
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[280px] text-left leading-relaxed">
-                            <p className="font-semibold mb-1">Quality Score: {qs.totalScore}/3 (S/V/R)</p>
-                            <p><strong>S</strong>pike: {qs.spikeScore === 1 ? '✅' : '❌'} Fast price crash/pump into level</p>
-                            <p><strong>V</strong>olume: {qs.volumeTrendScore === 1 ? '✅' : '❌'} Liq volume is decreasing/flat</p>
-                            <p><strong>R</strong>egime: {qs.regimeScore === 1 ? '✅' : '❌'} Choppy range (≥3 VWAP crosses/hr)</p>
-                            <p className="mt-1 text-[10px] opacity-80">3/3 = STRONG (1.5× size) · 2/3 = NORMAL · 1/3 = WEAK (0.5×) · 0/3 = SKIP</p>
+                          <TooltipContent side="top" className="max-w-[240px] text-left text-xs leading-relaxed">
+                            <p className="font-semibold mb-1">Quality {qs.totalScore}/3 (S/V/R)</p>
+                            <p>Spike {qs.spikeScore === 1 ? '✅' : '❌'} · Vol {qs.volumeTrendScore === 1 ? '✅' : '❌'} · Regime {qs.regimeScore === 1 ? '✅' : '❌'}</p>
+                            <p className="mt-1 opacity-70 text-[10px]">3=STRONG 1.5× · 2=NORMAL · 1=WEAK 0.5× · 0=SKIP</p>
                           </TooltipContent>
                         </Tooltip>
-                      )}
+                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
 
-                      {/* Outcome badge */}
-                      <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5 border", outcome.color)}>
-                        {outcome.icon}
-                        <span className="ml-0.5">{outcome.label}</span>
-                      </Badge>
+                      {/* Reason (truncated) */}
+                      <span className="text-[10px] text-muted-foreground truncate px-1" title={opp.reason}>{opp.reason}</span>
 
-                      {/* Time ago */}
-                      <span className="text-[10px] text-muted-foreground min-w-[24px] text-right">{formatTime(opp.timestamp)}</span>
+                      {/* Liq volume */}
+                      <span className="text-[10px] text-muted-foreground text-right font-mono tabular-nums">
+                        {opp.liquidationVolume > 0 ? `$${opp.liquidationVolume >= 1000 ? `${(opp.liquidationVolume / 1000).toFixed(1)}k` : opp.liquidationVolume.toFixed(0)}` : '—'}
+                      </span>
+
+                      {/* Outcome */}
+                      <span className={cn("text-right text-[9px] font-medium tabular-nums", outcome.color.split(' ')[0])}>
+                        {outcome.label}
+                      </span>
+
+                      {/* Age */}
+                      <span className="text-[10px] text-muted-foreground text-right tabular-nums">{formatTime(opp.timestamp)}</span>
                     </div>
 
-                    {/* Expanded detail - shown on click */}
+                    {/* Expanded detail panel */}
                     {isOpen && (
-                      <div className="px-2.5 pb-2 space-y-1.5 border-t border-border/30 pt-1.5">
-                        {/* Block reason - prominent */}
+                      <div className="px-3 pb-2.5 pt-0 space-y-2 border-t border-border/20 mt-0">
                         {blocked && opp.reason && (
-                          <div className={cn(
-                            "text-xs px-2 py-1 rounded flex items-start gap-1.5",
-                            opp.blockType === 'CASCADE_PROTECTION'
-                              ? "bg-purple-500/10 text-purple-300"
-                              : opp.blockType === 'VWAP_FILTER'
-                              ? "bg-orange-500/10 text-orange-300"
-                              : "bg-red-500/10 text-red-300"
+                          <div className={cn("text-[10px] px-2 py-1 rounded flex items-start gap-1.5",
+                            opp.blockType === 'CASCADE_PROTECTION' ? "bg-purple-500/10 text-purple-300"
+                            : opp.blockType === 'VWAP_FILTER' ? "bg-orange-500/10 text-orange-300"
+                            : "bg-red-500/10 text-red-300"
                           )}>
-                            {opp.blockType === 'CASCADE_PROTECTION' ? (
-                              <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                            ) : opp.blockType === 'VWAP_FILTER' ? (
-                              <ArrowUpDown className="h-3 w-3 shrink-0 mt-0.5" />
-                            ) : (
-                              <XCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                            )}
+                            <XCircle className="h-3 w-3 shrink-0 mt-0.5" />
                             <span>{opp.reason}</span>
                           </div>
                         )}
 
-                        {/* Metrics grid */}
                         {qs?.metrics && (
-                          <div className="grid grid-cols-4 gap-1 text-[10px]">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="px-1.5 py-1 rounded bg-muted/30 cursor-help">
-                                  <span className="text-muted-foreground flex items-center gap-0.5">Move <Info className="h-2.5 w-2.5 opacity-50" /></span>
-                                  <span className={qs.metrics.priceChangePercent > 0 ? 'text-green-400' : 'text-red-400'}>
-                                    {qs.metrics.priceChangePercent.toFixed(2)}%
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="max-w-[260px] text-left leading-relaxed">
-                                <p className="font-semibold">Price Move</p>
-                                <p>The % price moved during the detected spike. For BUY entries, this is the crash size. For SELL, the pump size.</p>
-                                <p className="mt-1"><span className="text-green-400">≥0.5%</span> = significant move (scores 1 for spike). <span className="text-yellow-400">&lt;0.5%</span> = minor move (needs high velocity to score).</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="px-1.5 py-1 rounded bg-muted/30 cursor-help">
-                                  <span className="text-muted-foreground flex items-center gap-0.5">Spike <Info className="h-2.5 w-2.5 opacity-50" /></span>
-                                  <span className={qs.metrics.spikeTimeSeconds > 0 && qs.metrics.spikeTimeSeconds < 30 ? 'text-green-400' : qs.metrics.spikeTimeSeconds === 0 ? 'text-muted-foreground' : 'text-yellow-400'}>
-                                    {qs.metrics.spikeTimeSeconds === 0 ? 'none' : `${qs.metrics.spikeTimeSeconds.toFixed(1)}s`}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="max-w-[260px] text-left leading-relaxed">
-                                <p className="font-semibold">Spike Duration</p>
-                                <p>How quickly the price move happened. Measures from where the rapid move started to now within a 2-min window.</p>
-                                <p className="mt-1"><span className="text-green-400">&lt;30s</span> = fast spike, likely to bounce. <span className="text-yellow-400">&gt;60s</span> = slow grind, may continue. <span className="text-muted-foreground">none</span> = no qualifying move in expected direction.</p>
-                                <p className="mt-1 text-[10px] opacity-80">Velocity (move÷time) &gt;0.1%/s scores as fast spike regardless of duration.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="px-1.5 py-1 rounded bg-muted/30 cursor-help">
-                                  <span className="text-muted-foreground flex items-center gap-0.5">Vol <Info className="h-2.5 w-2.5 opacity-50" /></span>
-                                  <span className={qs.metrics.recentVolumeRatio <= 1.1 ? 'text-green-400' : 'text-yellow-400'}>
-                                    {qs.metrics.recentVolumeRatio.toFixed(2)}&times;
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="max-w-[260px] text-left leading-relaxed">
-                                <p className="font-semibold">Liquidation Volume Trend</p>
-                                <p>Ratio of recent liq volume vs older liq volume. Compares the 2nd half of the volume window to the 1st half.</p>
-                                <p className="mt-1"><span className="text-green-400">≤1.1×</span> = flat/decreasing volume (exhaustion — good for reversal, scores 1). <span className="text-yellow-400">&gt;1.1×</span> = increasing volume (momentum building — risky).</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="px-1.5 py-1 rounded bg-muted/30 cursor-help">
-                                  <span className="text-muted-foreground flex items-center gap-0.5">VWAP <Info className="h-2.5 w-2.5 opacity-50" /></span>
-                                  <span>{qs.metrics.vwapDistance.toFixed(2)}%</span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="max-w-[260px] text-left leading-relaxed">
-                                <p className="font-semibold">VWAP Distance & Regime</p>
-                                <p>Current price distance from 1hr VWAP. Used for regime detection: how many times price crossed VWAP in the last hour.</p>
-                                <p className="mt-1"><span className="text-green-400">≥3 crosses/hr</span> = choppy (range-bound — ideal for mean reversion, scores 1). <span className="text-yellow-400">1-2 crosses</span> = neutral. <span className="text-red-400">≤1 cross</span> = trending (scores 0).</p>
-                                <p className="mt-1 text-[10px] opacity-80">Currently {qs.metrics.vwapCrossesPerHour} crosses/hr · {qs.metrics.isChoppyRegime ? 'Choppy ✅' : qs.metrics.isTrendingRegime ? 'Trending ❌' : 'Neutral ⚠️'}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        )}
-
-                        {/* Quality reasons */}
-                        {qs?.reasons && qs.reasons.length > 0 && (
-                          <div className="space-y-0.5">
-                            {qs.reasons.map((reason, ridx) => (
-                              <p key={ridx} className="text-[10px] text-muted-foreground pl-1">
-                                &bull; {reason}
-                              </p>
+                          <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                            {[
+                              { label: 'Move', value: `${qs.metrics.priceChangePercent.toFixed(2)}%`, good: Math.abs(qs.metrics.priceChangePercent) >= 0.5 },
+                              { label: 'Spike', value: qs.metrics.spikeTimeSeconds === 0 ? 'none' : `${qs.metrics.spikeTimeSeconds.toFixed(1)}s`, good: qs.metrics.spikeTimeSeconds > 0 && qs.metrics.spikeTimeSeconds < 30 },
+                              { label: 'Vol', value: `${qs.metrics.recentVolumeRatio.toFixed(2)}×`, good: qs.metrics.recentVolumeRatio <= 1.1 },
+                              { label: 'VWAP', value: `${qs.metrics.vwapDistance.toFixed(2)}%`, good: qs.metrics.isChoppyRegime },
+                            ].map(m => (
+                              <div key={m.label} className="bg-muted/30 rounded px-1.5 py-1">
+                                <span className="text-muted-foreground block text-[9px] uppercase tracking-wide">{m.label}</span>
+                                <span className={m.good ? 'text-green-400' : 'text-muted-foreground'}>{m.value}</span>
+                              </div>
                             ))}
                           </div>
                         )}
 
-                        {/* Position size adjustment */}
-                        {qs && qs.positionSizeMultiplier !== 1 && (
-                          <div className="text-[10px] flex items-center gap-1">
-                            <span className="text-muted-foreground">Size adj:</span>
-                            <span className={qs.positionSizeMultiplier > 1 ? 'text-green-400 font-medium' : 'text-yellow-400 font-medium'}>
-                              {qs.positionSizeMultiplier}&times;
-                            </span>
+                        {qs?.reasons && qs.reasons.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground space-y-0.5 pl-0.5">
+                            {qs.reasons.map((r, i) => <p key={i}>· {r}</p>)}
                           </div>
                         )}
 
-                        {/* Liq volume if available */}
-                        {opp.liquidationVolume > 0 && (
-                          <div className="text-[10px] flex items-center gap-1">
-                            <span className="text-muted-foreground">Liq vol:</span>
-                            <span className="font-mono">${opp.liquidationVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                          </div>
+                        {qs && qs.positionSizeMultiplier !== 1 && (
+                          <p className="text-[10px]">
+                            <span className="text-muted-foreground">Size: </span>
+                            <span className={qs.positionSizeMultiplier > 1 ? 'text-green-400 font-medium' : 'text-yellow-400 font-medium'}>{qs.positionSizeMultiplier}×</span>
+                          </p>
                         )}
                       </div>
                     )}
@@ -653,8 +506,8 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
               })
             )}
           </div>
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

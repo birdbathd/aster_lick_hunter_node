@@ -1,0 +1,1308 @@
+'use client';
+
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useConfig } from '@/components/ConfigProvider';
+import orderStore from '@/lib/services/orderStore';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import {
+  getCachedKlines, setCachedKlines, updateCachedKlines,
+  getCandlesFor7Days, prependHistoricalKlines,
+} from '@/lib/klineCache';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Loader2, RefreshCw, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// ═══════════════════════════════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════════════════════════════
+
+type KCLib = typeof import('klinecharts');
+type Chart = import('klinecharts').Chart;
+type KLineData = import('klinecharts').KLineData;
+
+interface LiquidationData {
+  time: number;
+  event_time: number;
+  volume: number;
+  volume_usdt: number;
+  side: 'BUY' | 'SELL';
+  price: number;
+  quantity: number;
+}
+
+interface GroupedLiquidation {
+  timestamp: number;
+  side: number;
+  totalVolume: number;
+  count: number;
+  price: number;
+}
+
+interface KLineChartProps {
+  symbol: string;
+  liquidations?: LiquidationData[];
+  positions?: any[];
+  className?: string;
+  availableSymbols?: string[];
+  onSymbolChange?: (symbol: string) => void;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════
+
+const TIMEFRAMES = [
+  { value: '1m', label: '1m' },
+  { value: '5m', label: '5m' },
+  { value: '15m', label: '15m' },
+  { value: '30m', label: '30m' },
+  { value: '1h', label: '1H' },
+  { value: '4h', label: '4H' },
+  { value: '1d', label: '1D' },
+];
+
+const LIQ_GROUPINGS = [
+  { value: '1m', label: '1m' },
+  { value: '5m', label: '5m' },
+  { value: '15m', label: '15m' },
+  { value: '30m', label: '30m' },
+  { value: '1h', label: '1H' },
+  { value: '4h', label: '4H' },
+  { value: '1d', label: '1D' },
+];
+
+const MAIN_INDICATORS = [
+  { value: 'none', label: 'None' },
+  { value: 'MA', label: 'MA' },
+  { value: 'EMA', label: 'EMA' },
+  { value: 'BOLL', label: 'BOLL' },
+  { value: 'SAR', label: 'SAR' },
+];
+
+const SUB_INDICATORS = [
+  { value: 'none', label: 'None' },
+  { value: 'VOL', label: 'Vol' },
+  { value: 'MACD', label: 'MACD' },
+  { value: 'RSI', label: 'RSI' },
+  { value: 'KDJ', label: 'KDJ' },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════
+
+function smartPrice(price: number): string {
+  const dec = price.toFixed(10).split('.')[1] || '';
+  let keep = 2, foundSig = false, zeros = 0;
+  for (let i = 0; i < dec.length; i++) {
+    if (dec[i] !== '0') { foundSig = true; zeros = 0; keep = i + 1; }
+    else { zeros++; if (foundSig && zeros >= 2) break; }
+  }
+  return price.toFixed(Math.max(2, keep));
+}
+
+function tfToSec(tf: string): number {
+  const m: Record<string, number> = {
+    '1m': 60, '5m': 300, '15m': 900, '30m': 1800,
+    '1h': 3600, '2h': 7200, '4h': 14400, '6h': 21600,
+    '12h': 43200, '1d': 86400,
+  };
+  return m[tf] || 300;
+}
+
+function tfToMs(tf: string): number {
+  const match = tf.match(/^(\d+)(m|h|d)$/);
+  if (!match) return 60000;
+  const n = parseInt(match[1], 10);
+  return n * (match[2] === 'm' ? 60000 : match[2] === 'h' ? 3600000 : 86400000);
+}
+
+function tfToPeriod(tf: string): { type: string; span: number } {
+  const match = tf.match(/^(\d+)(m|h|d)$/);
+  if (!match) return { type: 'minute', span: 5 };
+  const n = parseInt(match[1], 10);
+  const typeMap: Record<string, string> = { m: 'minute', h: 'hour', d: 'day' };
+  return { type: typeMap[match[2]] || 'minute', span: n };
+}
+
+function rawToKLine(data: any[]): KLineData[] {
+  return data.map((k: any[]) => ({
+    timestamp: typeof k[0] === 'number' ? k[0] : parseInt(k[0]),
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+    volume: k[5] != null ? parseFloat(k[5]) : undefined,
+  } as KLineData)).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Data Fetching (module-level, pure functions)
+// ═══════════════════════════════════════════════════════════════════
+
+async function fetchInitData(sym: string, tf: string): Promise<KLineData[]> {
+  const cached = getCachedKlines(sym, tf);
+  if (cached) {
+    const data = rawToKLine(cached.data);
+    if (Date.now() - cached.lastUpdate < 2 * 60 * 1000) return data;
+    try {
+      const r = await fetch(`/api/klines?symbol=${encodeURIComponent(sym)}&interval=${tf}&since=${cached.lastCandleTime}&limit=100`);
+      const j = await r.json();
+      if (j.success && j.data?.length > 0) {
+        const u = updateCachedKlines(sym, tf, j.data);
+        if (u) return rawToKLine(u.data);
+      }
+    } catch { /* use cached */ }
+    return data;
+  }
+  const limit = getCandlesFor7Days(tf);
+  const r = await fetch(`/api/klines?symbol=${encodeURIComponent(sym)}&interval=${tf}&limit=${limit}`);
+  const j = await r.json();
+  if (!j.success) throw new Error(j.error || 'Failed to fetch klines');
+  setCachedKlines(sym, tf, j.data);
+  return rawToKLine(j.data);
+}
+
+async function fetchBackwardData(sym: string, tf: string, endTs: number): Promise<KLineData[]> {
+  const r = await fetch(`/api/klines?symbol=${encodeURIComponent(sym)}&interval=${tf}&endTime=${endTs - 1}&limit=500`);
+  const j = await r.json();
+  if (j.success && j.data?.length > 0) {
+    prependHistoricalKlines(sym, tf, j.data);
+    return rawToKLine(j.data);
+  }
+  return [];
+}
+
+async function fetchLatestData(sym: string, tf: string): Promise<KLineData[]> {
+  const cached = getCachedKlines(sym, tf);
+  if (!cached) return [];
+  const r = await fetch(`/api/klines?symbol=${encodeURIComponent(sym)}&interval=${tf}&since=${cached.lastCandleTime}&limit=2`);
+  const j = await r.json();
+  if (j.success && j.data?.length > 0) {
+    updateCachedKlines(sym, tf, j.data);
+    return rawToKLine(j.data);
+  }
+  return [];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Global refs for custom indicator data (shared across instances)
+// ═══════════════════════════════════════════════════════════════════
+
+const _vwapDataMap = { current: new Map<number, number>() };
+const _frDataMap = { current: new Map<number, number>() };
+const _vwapTfRef = { current: '5m' };
+const _frTfRef = { current: '5m' };
+
+function _registerIndicators(kc: KCLib) {
+  try {
+    kc.registerIndicator({
+      name: 'VWAP_CUSTOM',
+      shortName: 'VWAP',
+      figures: [{ key: 'vwap', title: 'VWAP: ', type: 'line' }],
+      calc: (dataList: KLineData[]) => {
+        const vm = _vwapDataMap.current;
+        const tfMs = tfToMs(_vwapTfRef.current) * 2;
+        return dataList.map(k => {
+          const exact = vm.get(k.timestamp);
+          if (exact !== undefined) return { vwap: exact };
+          let closest: number | undefined, minD = Infinity;
+          for (const [ts, v] of vm) {
+            const d = Math.abs(ts - k.timestamp);
+            if (d < minD) { minD = d; closest = v; }
+          }
+          return { vwap: (closest !== undefined && minD < tfMs) ? closest : NaN };
+        });
+      },
+      styles: { lines: [{ color: '#ffa500' }] } as any,
+    });
+  } catch { /* already registered */ }
+
+  try {
+    kc.registerIndicator({
+      name: 'FUNDING_RATE',
+      shortName: 'FR',
+      figures: [{ key: 'fr', title: 'FR: ', type: 'line' }],
+      calc: (dataList: KLineData[]) => {
+        const fm = _frDataMap.current;
+        const bs = tfToSec(_frTfRef.current) * 1000;
+        return dataList.map(k => {
+          const bt = Math.floor(k.timestamp / bs) * bs;
+          return { fr: fm.get(bt) ?? NaN };
+        });
+      },
+      styles: { lines: [{ color: '#06b6d4' }] } as any,
+    });
+  } catch { /* already registered */ }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Drawing tools
+// ═══════════════════════════════════════════════════════════════════
+
+const DRAWING_TOOLS = [
+  { group: 'lines', tools: [
+    { name: 'segment', label: 'Segment', icon: '╱' },
+    { name: 'straightLine', label: 'Trend Line', icon: '⟋' },
+    { name: 'rayLine', label: 'Ray Line', icon: '↗' },
+  ]},
+  { group: 'horizontal', tools: [
+    { name: 'horizontalStraightLine', label: 'Horizontal Line', icon: '─' },
+    { name: 'horizontalSegment', label: 'H Segment', icon: '━' },
+    { name: 'horizontalRayLine', label: 'H Ray', icon: '→' },
+  ]},
+  { group: 'vertical', tools: [
+    { name: 'verticalStraightLine', label: 'Vertical Line', icon: '│' },
+    { name: 'verticalSegment', label: 'V Segment', icon: '┃' },
+    { name: 'verticalRayLine', label: 'V Ray', icon: '↓' },
+  ]},
+  { group: 'parallel', tools: [
+    { name: 'parallelStraightLine', label: 'Parallel Lines', icon: '═' },
+    { name: 'priceChannelLine', label: 'Price Channel', icon: '⊏' },
+  ]},
+  { group: 'fib', tools: [
+    { name: 'fibonacciLine', label: 'Fibonacci', icon: 'Fib' },
+  ]},
+  { group: 'annotate', tools: [
+    { name: 'simpleAnnotation', label: 'Annotation', icon: '✎' },
+    { name: 'simpleTag', label: 'Tag', icon: '⚑' },
+  ]},
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// Overlay Registration (once globally)
+// ═══════════════════════════════════════════════════════════════════
+
+let _overlaysRegistered = false;
+
+function registerOverlays(kc: KCLib) {
+  if (_overlaysRegistered) return;
+  _overlaysRegistered = true;
+
+  // --- Horizontal price line ---
+  kc.registerOverlay({
+    name: 'priceLine',
+    totalStep: 0,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: true,
+    createPointFigures: ({ overlay, bounding, yAxis }: any) => {
+      const ext = overlay.extendData;
+      if (!ext?.price || !yAxis) return [];
+      const y = yAxis.convertToNicePixel(ext.price);
+      if (y < -20 || y > bounding.height + 20) return [];
+      const solid = ext.lineStyle === 'solid';
+      return [{
+        type: 'line',
+        attrs: { coordinates: [{ x: 0, y }, { x: bounding.width, y }] },
+        styles: {
+          style: solid ? 'solid' : 'dashed',
+          color: ext.color || '#ffa726',
+          size: solid ? 2 : 1,
+          dashedValue: solid ? [0, 0] : ext.lineStyle === 'dotted' ? [2, 4] : [6, 4],
+        },
+      }, ...(ext.label ? [{
+        type: 'text',
+        attrs: { x: 8, y: y - 14, text: ext.label },
+        styles: {
+          color: '#fff', size: 10, family: 'inherit',
+          backgroundColor: ext.color || '#ffa726',
+          borderRadius: 2,
+          paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2,
+        },
+      }] : [])];
+    },
+    createYAxisFigures: ({ overlay, yAxis }: any) => {
+      const ext = overlay.extendData;
+      if (!ext?.price || !yAxis) return [];
+      const y = yAxis.convertToNicePixel(ext.price);
+      return [{
+        type: 'text',
+        attrs: { x: 0, y, text: smartPrice(ext.price) },
+        styles: {
+          color: '#fff', size: 10, family: 'inherit',
+          backgroundColor: ext.color || '#ffa726',
+          borderRadius: 2,
+          paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1,
+        },
+      }];
+    },
+  } as any);
+
+  // --- Liquidation marker ---
+  kc.registerOverlay({
+    name: 'liqMarker',
+    totalStep: 0,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: ({ overlay, bounding, xAxis, yAxis }: any) => {
+      const ext = overlay.extendData;
+      if (!ext || !xAxis || !yAxis) return [];
+      const x = xAxis.convertTimestampToPixel(ext.timestamp);
+      const y = yAxis.convertToNicePixel(ext.price);
+      if (x < -20 || x > bounding.width + 20 || y < -20 || y > bounding.height + 20) return [];
+      if (!isFinite(x) || !isFinite(y)) return [];
+      return [
+        { type: 'circle', attrs: { x, y, r: ext.r || 3 }, styles: { color: ext.color, style: 'fill' } },
+        ...(ext.text ? [{ type: 'text', attrs: { x, y: y + (ext.r || 3) + 10, text: ext.text }, styles: { color: ext.color, size: 8, family: 'inherit' } }] : []),
+      ];
+    },
+  } as any);
+
+  // --- Order marker ---
+  kc.registerOverlay({
+    name: 'orderMarker',
+    totalStep: 0,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: ({ overlay, bounding, xAxis, yAxis }: any) => {
+      const ext = overlay.extendData;
+      if (!ext || !xAxis || !yAxis) return [];
+      const x = xAxis.convertTimestampToPixel(ext.timestamp);
+      const y = yAxis.convertToNicePixel(ext.price);
+      if (x < -20 || x > bounding.width + 20 || y < -20 || y > bounding.height + 20) return [];
+      if (!isFinite(x) || !isFinite(y)) return [];
+      const s = 6;
+      const arrow = ext.isBuy
+        ? { type: 'polygon', attrs: { coordinates: [{ x: x - s, y: y + s }, { x: x + s, y: y + s }, { x, y: y - s }] }, styles: { color: ext.color, style: 'fill' } }
+        : { type: 'polygon', attrs: { coordinates: [{ x: x - s, y: y - s }, { x: x + s, y: y - s }, { x, y: y + s }] }, styles: { color: ext.color, style: 'fill' } };
+      return [
+        arrow,
+        ...(ext.text ? [{ type: 'text', attrs: { x, y: ext.isBuy ? y - s - 12 : y + s + 12, text: ext.text }, styles: { color: ext.color, size: 8, family: 'inherit' } }] : []),
+      ];
+    },
+  } as any);
+
+  // --- Register custom indicators globally ---
+  _registerIndicators(kc);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Component
+// ═══════════════════════════════════════════════════════════════════
+
+export default function KLineChartComponent({
+  symbol,
+  liquidations = [],
+  positions = [],
+  className,
+  availableSymbols = [],
+  onSymbolChange,
+}: KLineChartProps) {
+  const { config } = useConfig();
+
+  // ── Refs ──
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<Chart | null>(null);
+  const kcRef = useRef<KCLib | null>(null);
+  const latestPriceRef = useRef(0);
+  const symbolRef = useRef(symbol);
+  const timeframeRef = useRef('5m');
+  const subscribeBarRef = useRef<((data: KLineData) => void) | null>(null);
+  const loadingBackwardRef = useRef(false);
+
+  // ── State ──
+  const [isVisible, setIsVisible] = useState(true);
+  const [timeframe, setTimeframe] = useState('5m');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [mainIndicator, setMainIndicator] = useState('none');
+  const [subIndicator, setSubIndicator] = useState('VOL');
+  const [showPositions, setShowPositions] = useState(true);
+  const [showLiquidations, setShowLiquidations] = useState(true);
+  const [liqGrouping, setLiqGrouping] = useState('5m');
+  const [showRecentOrders, setShowRecentOrders] = useState(false);
+  const [showVWAP, setShowVWAP] = useState(false);
+  const [showFundingRate, setShowFundingRate] = useState(false);
+  const [fundingRateHover, setFundingRateHover] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(30);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
+  const [activeDrawingTool, setActiveDrawingTool] = useState<string | null>(null);
+  const [showDrawingTools, setShowDrawingTools] = useState(false);
+
+  // Keep refs synced
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
+
+  // ── Overlay data state ──
+  const [dbLiquidations, setDbLiquidations] = useState<LiquidationData[]>([]);
+  const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [filledOrders, setFilledOrders] = useState<any[]>([]);
+  const allLiquidations = useMemo(() => [...liquidations, ...dbLiquidations], [liquidations, dbLiquidations]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Chart lifecycle: init once, dispose on unmount
+  // Container is ALWAYS in the DOM. Chart is created via dynamic import.
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (!isVisible) return;
+    let disposed = false;
+    let chart: Chart | null = null;
+
+    const boot = async () => {
+      // Wait for container to actually be in DOM with dimensions
+      const el = containerRef.current;
+      if (!el || el.clientWidth === 0) {
+        // Retry after a frame
+        await new Promise(r => requestAnimationFrame(r));
+        if (disposed || !containerRef.current) return;
+      }
+
+      const kc = await import('klinecharts');
+      if (disposed) return;
+      kcRef.current = kc;
+      registerOverlays(kc);
+
+      chart = kc.init(containerRef.current!, {
+        styles: {
+          grid: {
+            horizontal: { color: 'rgba(197,203,206,0.08)' },
+            vertical: { color: 'rgba(197,203,206,0.08)' },
+          },
+          candle: {
+            bar: {
+              upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888',
+              upBorderColor: '#26a69a', downBorderColor: '#ef5350', noChangeBorderColor: '#888',
+              upWickColor: '#26a69a', downWickColor: '#ef5350', noChangeWickColor: '#888',
+            },
+            priceMark: {
+              show: true,
+              high: { show: true, color: '#D9D9D9', textSize: 10 },
+              low: { show: true, color: '#D9D9D9', textSize: 10 },
+              last: {
+                show: true,
+                upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888',
+                line: { show: true, style: 'dash' },
+              },
+            },
+            tooltip: { showRule: 'follow_cross' },
+          },
+          yAxis: { tickText: { color: '#9b9b9b' } },
+          xAxis: { tickText: { color: '#9b9b9b' } },
+          crosshair: {
+            horizontal: { line: { color: 'rgba(150,150,150,0.5)', style: 'dash' } },
+            vertical: { line: { color: 'rgba(150,150,150,0.5)', style: 'dash' } },
+          },
+          separator: { color: 'rgba(197,203,206,0.15)' },
+        } as any,
+      });
+
+      if (!chart || disposed) return;
+      chartRef.current = chart;
+
+      // Set symbol + period FIRST — required for DataLoader to trigger getBars
+      chart.setSymbol({ ticker: symbolRef.current, pricePrecision: 2, volumePrecision: 2 } as any);
+      chart.setPeriod(tfToPeriod(timeframeRef.current) as any);
+
+      // Set up DataLoader — chart calls getBars automatically after setSymbol+setPeriod
+      setupDataLoader(chart, symbolRef.current, timeframeRef.current);
+
+      // Listen for scroll near left edge → load historical data
+      chart.subscribeAction('onVisibleRangeChange', () => {
+        if (!chart || loadingBackwardRef.current) return;
+        const range = chart.getVisibleRange();
+        if (range && range.from < 15) {
+          loadBackward();
+        }
+      });
+    };
+
+    boot();
+
+    return () => {
+      disposed = true;
+      subscribeBarRef.current = null;
+      if (chart && kcRef.current) {
+        try { kcRef.current.dispose(chart); } catch { /* ok */ }
+      }
+      chartRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible]);
+
+  // ── Setup DataLoader (called on init + symbol/tf change) ──
+
+  function setupDataLoader(chart: Chart, sym: string, tf: string) {
+    setLoading(true);
+    setError(null);
+    subscribeBarRef.current = null;
+
+    chart.setDataLoader({
+      getBars: async (params) => {
+        try {
+          if (params.type === 'init') {
+            const data = await fetchInitData(sym, tf);
+            params.callback(data, { backward: true, forward: false });
+            if (data.length > 0) latestPriceRef.current = data[data.length - 1].close;
+            setLoading(false);
+            setLastUpdate(new Date());
+            setDataVersion(v => v + 1);
+          } else if (params.type === 'backward') {
+            const ts = params.timestamp;
+            if (!ts) { params.callback([], false); return; }
+            loadingBackwardRef.current = true;
+            setIsLoadingHistorical(true);
+            const data = await fetchBackwardData(sym, tf, ts);
+            params.callback(data, data.length > 0);
+            loadingBackwardRef.current = false;
+            setIsLoadingHistorical(false);
+          } else {
+            params.callback([], false);
+          }
+        } catch (err) {
+          console.error('[KLineChart] getBars error:', err);
+          params.callback([], false);
+          setError(err instanceof Error ? err.message : 'Failed to load chart data');
+          setLoading(false);
+        }
+      },
+      subscribeBar: (params) => {
+        subscribeBarRef.current = params.callback;
+      },
+      unsubscribeBar: () => {
+        subscribeBarRef.current = null;
+      },
+    });
+  }
+
+  // ── Load backward (historical) ──
+
+  const loadBackward = useCallback(async () => {
+    if (!chartRef.current || loadingBackwardRef.current) return;
+    const chart = chartRef.current;
+    const dataList = chart.getDataList();
+    if (dataList.length === 0) return;
+    const earliest = dataList[0].timestamp;
+    loadingBackwardRef.current = true;
+    setIsLoadingHistorical(true);
+    try {
+      const data = await fetchBackwardData(symbolRef.current, timeframeRef.current, earliest);
+      if (data.length > 0) {
+        // Chart should have gotten this via the DataLoader callback.
+        // If not (manual call), we can try resetting.
+        console.log(`[KLineChart] Loaded ${data.length} historical candles`);
+      }
+    } catch { /* ok */ }
+    loadingBackwardRef.current = false;
+    setIsLoadingHistorical(false);
+  }, []);
+
+  // ── Symbol / timeframe change → reload ──
+
+  const initialBootDone = useRef(false);
+  useEffect(() => {
+    if (!chartRef.current || !isVisible) return;
+    // Skip the first run — boot effect already called setupDataLoader
+    if (!initialBootDone.current) {
+      initialBootDone.current = true;
+      return;
+    }
+    // Update symbol and period on the chart, then re-set DataLoader
+    chartRef.current.setSymbol({ ticker: symbol, pricePrecision: 2, volumePrecision: 2 } as any);
+    chartRef.current.setPeriod(tfToPeriod(timeframe) as any);
+    setupDataLoader(chartRef.current, symbol, timeframe);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, timeframe]);
+
+  // ── Auto-refresh ──
+
+  useEffect(() => {
+    if (!autoRefresh || !isVisible || !symbol) return;
+    const timer = setInterval(async () => {
+      setIsRefreshing(true);
+      try {
+        const latest = await fetchLatestData(symbolRef.current, timeframeRef.current);
+        if (latest.length > 0) {
+          if (subscribeBarRef.current) {
+            // Push candles one by one — chart merges by timestamp
+            latest.forEach(k => subscribeBarRef.current!(k));
+            latestPriceRef.current = latest[latest.length - 1].close;
+          } else if (chartRef.current) {
+            // Fallback: full reload
+            setupDataLoader(chartRef.current, symbolRef.current, timeframeRef.current);
+          }
+          setDataVersion(v => v + 1);
+        }
+        // Refresh overlay data
+        fetchLiqData();
+        fetchOrders();
+      } catch { /* ok */ }
+      setIsRefreshing(false);
+      setLastUpdate(new Date());
+    }, refreshInterval * 1000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, isVisible, symbol, refreshInterval]);
+
+  // ── Manual refresh ──
+
+  const handleRefresh = useCallback(async () => {
+    if (!chartRef.current) return;
+    setIsRefreshing(true);
+    try {
+      setupDataLoader(chartRef.current, symbolRef.current, timeframeRef.current);
+      fetchLiqData();
+      fetchOrders();
+    } catch { /* ok */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Resize ──
+
+  useEffect(() => {
+    const h = () => chartRef.current?.resize();
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+
+  // ── Drawing tools ──
+
+  const handleDrawingTool = useCallback((toolName: string) => {
+    if (!chartRef.current) return;
+    if (activeDrawingTool === toolName) {
+      // Deselect
+      setActiveDrawingTool(null);
+    } else {
+      chartRef.current.createOverlay(toolName);
+      setActiveDrawingTool(toolName);
+    }
+  }, [activeDrawingTool]);
+
+  const clearDrawings = useCallback(() => {
+    if (!chartRef.current) return;
+    // Remove all drawing overlays (not our data overlays)
+    const dataGroups = ['positions', 'liqs', 'orders'];
+    const all = chartRef.current.getOverlays();
+    all.forEach((ov: any) => {
+      if (!dataGroups.includes(ov.groupId)) {
+        chartRef.current?.removeOverlay({ id: ov.id });
+      }
+    });
+    setActiveDrawingTool(null);
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Indicators
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    // Remove all main-pane indicators, then add selected
+    const existing = c.getIndicators({ paneId: 'candle_pane' });
+    existing.forEach(ind => {
+      if (ind.name !== 'VWAP_CUSTOM') c.removeIndicator({ paneId: 'candle_pane', name: ind.name });
+    });
+    if (mainIndicator !== 'none') {
+      c.createIndicator(mainIndicator, true, { id: 'candle_pane' });
+    }
+  }, [mainIndicator, dataVersion]);
+
+  const prevSubRef = useRef<string>('none');
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    if (prevSubRef.current !== 'none') {
+      c.removeIndicator({ name: prevSubRef.current });
+    }
+    if (subIndicator !== 'none') {
+      c.createIndicator(subIndicator, false, { height: 100 });
+    }
+    prevSubRef.current = subIndicator;
+  }, [subIndicator, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Data fetching for overlays
+  // ══════════════════════════════════════════════════════════════════
+
+  const fetchLiqData = useCallback(async () => {
+    if (!symbol) return;
+    try {
+      const r = await fetch(`/api/liquidations?symbol=${encodeURIComponent(symbol)}&limit=2000`);
+      const j = await r.json();
+      if (j.success && j.data) {
+        setDbLiquidations(j.data.map((l: any) => ({
+          time: l.event_time, event_time: l.event_time,
+          volume: l.volume_usdt, volume_usdt: l.volume_usdt,
+          side: l.side, price: l.price, quantity: l.quantity,
+        })));
+      }
+    } catch { /* ok */ }
+  }, [symbol]);
+
+  const fetchOrders = useCallback(async () => {
+    if (!symbol) return;
+    try {
+      const r = await fetch('/api/orders');
+      const j = await r.json();
+      if (Array.isArray(j)) setOpenOrders(j.filter((o: any) => o.symbol === symbol));
+    } catch { /* ok */ }
+  }, [symbol]);
+
+  // Fetch on mount + symbol change
+  useEffect(() => {
+    if (symbol && isVisible) { fetchLiqData(); fetchOrders(); }
+  }, [symbol, isVisible, fetchLiqData, fetchOrders]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Position / TP / SL overlay drawing
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    c.removeOverlay({ groupId: 'positions' });
+    if (!showPositions) return;
+
+    const livePrice = latestPriceRef.current > 0 ? latestPriceRef.current : undefined;
+    const symPositions = positions.filter(p => p.symbol === symbol);
+
+    symPositions.forEach(pos => {
+      const entry = parseFloat(pos.entryPrice || pos.markPrice || pos.avgPrice || '0');
+      const qty = parseFloat(pos.quantity || pos.positionAmt || pos.size || '0');
+      const side = pos.side;
+      const amt = side === 'SHORT' ? -qty : qty;
+      const liqPrice = parseFloat(pos.liquidationPrice || '0');
+      if (entry <= 0 || Math.abs(amt) <= 0) return;
+      const isLong = amt > 0;
+
+      c.createOverlay({
+        name: 'priceLine', groupId: 'positions', lock: true, visible: true,
+        points: [{ value: entry }] as any,
+        extendData: { price: entry, label: `${isLong ? 'LONG' : 'SHORT'} Entry: ${smartPrice(entry)}`, color: isLong ? '#26a69a' : '#ef5350', lineStyle: 'solid' },
+      } as any);
+
+      if (liqPrice > 0) {
+        c.createOverlay({
+          name: 'priceLine', groupId: 'positions', lock: true, visible: true,
+          points: [{ value: liqPrice }] as any,
+          extendData: { price: liqPrice, label: `Liquidation: ${smartPrice(liqPrice)}`, color: '#ff1744', lineStyle: 'dashed' },
+        } as any);
+      }
+    });
+
+    // Open orders (TP / SL / Trailing Stop)
+    openOrders.filter(o => o.symbol === symbol).forEach(order => {
+      const isTrail = order.type === 'TRAILING_STOP_MARKET';
+      if (isTrail) {
+        const actPrice = parseFloat(order.activatePrice || '0');
+        const stopPrice = parseFloat(order.stopPrice || '0');
+        const cbRate = parseFloat(order.priceRate || '0');
+        const posSide = order.positionSide || (order.side === 'SELL' ? 'LONG' : 'SHORT');
+        const matchPos = symPositions.find(p => (p.side || p.positionSide || '').toUpperCase() === posSide.toUpperCase());
+        const mp = (livePrice && livePrice > 0) ? livePrice : (matchPos ? parseFloat(matchPos.markPrice || matchPos.avgPrice || '0') : 0);
+        const isLng = posSide === 'LONG';
+        const activated = actPrice > 0 && mp > 0 && (isLng ? mp >= actPrice : mp <= actPrice);
+
+        if (actPrice > 0) {
+          c.createOverlay({
+            name: 'priceLine', groupId: 'positions', lock: true, visible: true,
+            points: [{ value: actPrice }] as any,
+            extendData: { price: actPrice, label: activated ? 'Trail Armed ✓' : `Trail Arm: ${smartPrice(actPrice)}`, color: activated ? '#22c55e' : '#a855f7', lineStyle: 'dashed' },
+          } as any);
+        }
+        if (activated) {
+          let live = stopPrice;
+          if (cbRate > 0 && mp > 0) {
+            const est = isLng ? mp * (1 - cbRate / 100) : mp * (1 + cbRate / 100);
+            live = isLng ? Math.max(stopPrice, est) : Math.min(stopPrice, est);
+          }
+          if (live > 0) {
+            c.createOverlay({
+              name: 'priceLine', groupId: 'positions', lock: true, visible: true,
+              points: [{ value: live }] as any,
+              extendData: { price: live, label: `Trail Stop: ${smartPrice(live)} (-${cbRate}%)`, color: '#22c55e', lineStyle: 'solid' },
+            } as any);
+          }
+        }
+        return;
+      }
+      const p = parseFloat(order.stopPrice || order.price || '0');
+      if (p <= 0) return;
+      const isTP = order.type?.includes('TAKE_PROFIT');
+      const isSL = order.type?.includes('STOP') && !isTP;
+      const color = isTP ? '#4caf50' : isSL ? '#f44336' : '#ffa726';
+      const label = isTP ? `TP: ${smartPrice(p)}` : isSL ? `SL: ${smartPrice(p)}` : `Order: ${smartPrice(p)}`;
+      c.createOverlay({
+        name: 'priceLine', groupId: 'positions', lock: true, visible: true,
+        points: [{ value: p }] as any,
+        extendData: { price: p, label, color, lineStyle: 'dashed' },
+      } as any);
+    });
+  }, [positions, openOrders, showPositions, symbol, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Liquidation markers
+  // ══════════════════════════════════════════════════════════════════
+
+  const groupLiqs = useCallback((liqs: LiquidationData[], gTf: string): GroupedLiquidation[] => {
+    const groups: Record<string, GroupedLiquidation> = {};
+    const ps = tfToSec(gTf);
+    [...liqs].sort((a, b) => a.event_time - b.event_time).forEach(l => {
+      const sec = Math.floor(l.event_time / 1000);
+      const pe = (Math.floor(sec / ps) + 1) * ps;
+      const side = l.side === 'SELL' ? 1 : 0;
+      const k = `${pe}_${side}`;
+      if (!groups[k]) groups[k] = { timestamp: pe * 1000, side, totalVolume: 0, count: 0, price: 0 };
+      groups[k].totalVolume += l.volume_usdt;
+      groups[k].count++;
+      groups[k].price = (groups[k].price * (groups[k].count - 1) + l.price) / groups[k].count;
+    });
+    return Object.values(groups).sort((a, b) => a.timestamp - b.timestamp);
+  }, []);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    c.removeOverlay({ groupId: 'liqs' });
+    if (!showLiquidations || allLiquidations.length === 0) return;
+
+    const grouped = groupLiqs(allLiquidations, liqGrouping);
+    const overlays = grouped.map(g => {
+      const vol = g.totalVolume;
+      const color = g.side === 1
+        ? (vol > 1e6 ? '#ff1744' : vol > 1e5 ? '#ff5722' : '#ff9800')
+        : (vol > 1e6 ? '#1976d2' : vol > 1e5 ? '#2196f3' : '#64b5f6');
+      const r = vol > 1e6 ? 6 : vol > 1e5 ? 4 : 2;
+      const text = `${g.count}${g.side === 1 ? 'L' : 'S'} $${vol >= 1000 ? (vol / 1000).toFixed(0) + 'K' : vol.toFixed(0)}`;
+      return {
+        name: 'liqMarker', groupId: 'liqs', lock: true, visible: true,
+        points: [{ timestamp: g.timestamp, value: g.price }],
+        extendData: { color, r, text, timestamp: g.timestamp, price: g.price },
+      };
+    });
+    if (overlays.length > 0) c.createOverlay(overlays as any);
+  }, [showLiquidations, allLiquidations, liqGrouping, groupLiqs, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // VWAP custom indicator
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    c.removeIndicator({ name: 'VWAP_CUSTOM', paneId: 'candle_pane' });
+    if (!showVWAP || !symbol) return;
+
+    const symCfg = config?.symbols?.[symbol];
+    const vwapTf = symCfg?.vwapTimeframe || '5m';
+    _vwapTfRef.current = timeframe; // used by calc function
+
+    const doFetch = async () => {
+      try {
+        const r = await fetch(`/api/vwap/historical?symbol=${encodeURIComponent(symbol)}&timeframe=${vwapTf}&limit=1500`);
+        const j = await r.json();
+        if (!j?.data?.length) return;
+
+        // Downsample
+        const chartMs = tfToMs(timeframe);
+        const vMs = tfToMs(vwapTf);
+        let pts = j.data;
+        if (chartMs > vMs) {
+          const step = Math.max(1, Math.floor(chartMs / vMs));
+          const ds: typeof pts = [];
+          for (let i = 0; i < pts.length; i += step) ds.push(pts[i]);
+          if (pts.length > 0 && (pts.length - 1) % step !== 0) ds.push(pts[pts.length - 1]);
+          pts = ds;
+        }
+
+        const map = new Map<number, number>();
+        for (const p of pts) {
+          const ts = p.time < 1e12 ? p.time * 1000 : p.time;
+          map.set(ts, p.value);
+        }
+        _vwapDataMap.current = map;
+
+        // Remove and re-add to force recalc with new data
+        c.removeIndicator({ name: 'VWAP_CUSTOM', paneId: 'candle_pane' });
+        c.createIndicator('VWAP_CUSTOM', true, { id: 'candle_pane' });
+      } catch (err) {
+        console.warn('[KLineChart] VWAP error:', err);
+      }
+    };
+
+    doFetch();
+    const iv = setInterval(doFetch, 30000);
+    return () => {
+      clearInterval(iv);
+      chartRef.current?.removeIndicator({ name: 'VWAP_CUSTOM', paneId: 'candle_pane' });
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showVWAP, symbol, config, timeframe, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Funding Rate custom indicator
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    c.removeIndicator({ name: 'FUNDING_RATE' });
+    if (!showFundingRate || !symbol) return;
+
+    _frTfRef.current = timeframe; // used by calc function
+
+    const hrsMap: Record<string, number> = {
+      '1m': 24, '5m': 72, '15m': 168, '30m': 336, '1h': 720, '4h': 720, '1d': 720,
+    };
+
+    const doFetch = async () => {
+      try {
+        const r = await fetch(`/api/funding-rates?symbol=${encodeURIComponent(symbol)}&hours=${hrsMap[timeframe] || 168}`);
+        const j = await r.json();
+        if (!j?.data?.length) return;
+
+        const bSec = tfToSec(timeframe);
+        const map = new Map<number, number>();
+        for (const d of j.data) {
+          const b = Math.floor(d.time / bSec) * bSec * 1000;
+          map.set(b, d.value);
+        }
+        _frDataMap.current = map;
+
+        // Remove and re-add to force recalc with new data
+        c.removeIndicator({ name: 'FUNDING_RATE' });
+        c.createIndicator('FUNDING_RATE', false, { height: 80 });
+      } catch (err) {
+        console.warn('[KLineChart] FR error:', err);
+      }
+    };
+
+    doFetch();
+
+    // Crosshair hover for FR
+    const onCrosshair = (data: any) => {
+      if (!data?.dataIndex) { setFundingRateHover(null); return; }
+      const inds = c.getIndicators({ name: 'FUNDING_RATE' });
+      if (inds.length > 0 && inds[0].result) {
+        const val = (inds[0].result[data.dataIndex] as any)?.fr;
+        setFundingRateHover(val != null && isFinite(val) ? val.toFixed(4) + '%' : null);
+      } else {
+        setFundingRateHover(null);
+      }
+    };
+    c.subscribeAction('onCrosshairChange', onCrosshair);
+
+    const iv = setInterval(doFetch, 60000);
+    return () => {
+      clearInterval(iv);
+      try { c.unsubscribeAction('onCrosshairChange', onCrosshair); } catch { /* */ }
+      chartRef.current?.removeIndicator({ name: 'FUNDING_RATE' });
+      setFundingRateHover(null);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFundingRate, symbol, timeframe, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // Recent orders
+  // ══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    const load = async () => {
+      if (!showRecentOrders) { setFilledOrders([]); return; }
+      try {
+        const params = new URLSearchParams({
+          symbol, format: 'orders', limit: '500',
+          startTime: (Date.now() - 90 * 86400000).toString(),
+        });
+        const r = await fetch(`/api/trades/history?${params}`);
+        if (r.ok) {
+          const db = await r.json();
+          if (db.length > 0) {
+            const ids = new Set(db.map((o: any) => o.orderId));
+            const rt = orderStore.getOrders().data.filter((o: any) =>
+              o.status === 'FILLED' && o.symbol === symbol && !ids.has(o.orderId));
+            setFilledOrders([...rt, ...db]);
+            return;
+          }
+        }
+      } catch { /* fallthrough */ }
+      setFilledOrders(orderStore.getOrders().data.filter((o: any) => o.status === 'FILLED' && o.symbol === symbol));
+    };
+    load();
+    const h = () => {
+      if (!showRecentOrders) return;
+      const all = orderStore.getOrders().data.filter((o: any) => o.status === 'FILLED' && o.symbol === symbol);
+      setFilledOrders(prev => {
+        const ids = new Set(prev.map((o: any) => o.orderId));
+        const fresh = all.filter((o: any) => !ids.has(o.orderId));
+        return fresh.length > 0 ? [...fresh, ...prev] : prev;
+      });
+    };
+    orderStore.on('orders:updated', h);
+    orderStore.on('orders:filtered', h);
+    return () => { orderStore.off('orders:updated', h); orderStore.off('orders:filtered', h); };
+  }, [symbol, showRecentOrders]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const c = chartRef.current;
+    c.removeOverlay({ groupId: 'orders' });
+    if (!showRecentOrders || filledOrders.length === 0) return;
+
+    const seen = new Set<string>();
+    const ovs: any[] = [];
+    filledOrders.forEach((o: any) => {
+      if (!o.orderId || seen.has(o.orderId)) return;
+      seen.add(o.orderId);
+      const t = Number(o.updateTime || o.time || o.transactTime);
+      const price = parseFloat(o.avgPrice || o.price || o.stopPrice || '0');
+      if (price <= 0) return;
+      const isBuy = o.side === 'BUY';
+      const isReduce = o.reduceOnly === true || o.reduceOnly === 'true';
+      const pnl = o.realizedProfit ? parseFloat(o.realizedProfit) : 0;
+      const color = isReduce ? (pnl > 0 ? '#4caf50' : pnl < 0 ? '#f44336' : '#9e9e9e') : (isBuy ? '#26a69a' : '#ef5350');
+      const type = isReduce ? (isBuy ? 'Close SHORT' : 'Close LONG') : (isBuy ? 'LONG' : 'SHORT');
+      const qty = o.executedQty || o.origQty || '';
+      let text = `${type} ${qty}@${smartPrice(price)}`;
+      if (isReduce && pnl !== 0) text += ` ${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+      ovs.push({
+        name: 'orderMarker', groupId: 'orders', lock: true, visible: true,
+        points: [{ timestamp: t, value: price }],
+        extendData: { color, isBuy: isBuy && !isReduce, text, timestamp: t, price },
+      });
+    });
+    if (ovs.length > 0) c.createOverlay(ovs as any);
+  }, [showRecentOrders, filledOrders, dataVersion]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════
+
+  if (!symbol) {
+    return (
+      <Card className={className}>
+        <CardContent className="flex items-center justify-center h-96">
+          <p className="text-muted-foreground">Select a symbol to view chart</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={className}>
+      <CardHeader className="py-2 px-3 sm:px-4">
+        {/* ── Title Row ── */}
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsVisible(v => !v)}>
+          {availableSymbols.length > 0 && onSymbolChange ? (
+            <div onClick={e => e.stopPropagation()} className="flex items-center gap-2">
+              <SearchableSelect
+                value={symbol} onValueChange={onSymbolChange}
+                options={availableSymbols} placeholder="Symbol"
+                className="w-[120px] sm:w-[140px] h-7"
+              />
+            </div>
+          ) : (
+            <span className="text-sm font-medium">{symbol}</span>
+          )}
+          <span className="text-xs text-muted-foreground">Chart</span>
+          <ChevronDown className={cn('h-3.5 w-3.5 ml-auto transition-transform', !isVisible && '-rotate-90')} />
+        </div>
+
+        {/* ── Toolbar (only when visible) ── */}
+        {isVisible && (
+          <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t">
+            {/* Row 1: Timeframe pills + Indicators + Refresh */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Timeframe buttons */}
+              <div className="flex gap-0.5 bg-muted/30 rounded-md p-0.5">
+                {TIMEFRAMES.map(tf => (
+                  <button
+                    key={tf.value}
+                    onClick={() => setTimeframe(tf.value)}
+                    className={cn(
+                      'px-2 py-1 text-xs font-medium rounded transition-colors',
+                      timeframe === tf.value
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
+                    )}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-4 w-px bg-border hidden sm:block" />
+
+              {/* Indicator selectors */}
+              <div className="flex items-center gap-1.5 bg-muted/30 rounded-md px-2 py-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase">Main</span>
+                <Select value={mainIndicator} onValueChange={setMainIndicator}>
+                  <SelectTrigger className="h-7 w-[70px] text-xs border bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MAIN_INDICATORS.map(i => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-[10px] text-muted-foreground uppercase">Sub</span>
+                <Select value={subIndicator} onValueChange={setSubIndicator}>
+                  <SelectTrigger className="h-7 w-[70px] text-xs border bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SUB_INDICATORS.map(i => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Spacer pushes refresh to right on desktop */}
+              <div className="flex-1 hidden sm:block" />
+
+              {/* Refresh controls */}
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 bg-muted/30 rounded-md px-2 py-0.5">
+                  <Checkbox id="ar" checked={autoRefresh} onCheckedChange={c => setAutoRefresh(c as boolean)} className="h-3.5 w-3.5" />
+                  <Label htmlFor="ar" className="text-xs cursor-pointer">Auto</Label>
+                  {autoRefresh && (
+                    <Select value={refreshInterval.toString()} onValueChange={v => setRefreshInterval(parseInt(v))}>
+                      <SelectTrigger className="h-7 w-[60px] text-xs border bg-background"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[5, 10, 15, 30, 60, 120, 300].map(s => (
+                          <SelectItem key={s} value={s.toString()}>{s < 60 ? `${s}s` : `${s / 60}m`}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                {lastUpdate && <span className="text-[10px] text-muted-foreground hidden sm:inline">{lastUpdate.toLocaleTimeString()}</span>}
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing || loading} className="h-7 px-2.5 text-xs">
+                  <RefreshCw className={cn('h-3 w-3', isRefreshing && 'animate-spin')} />
+                </Button>
+              </div>
+            </div>
+
+            {/* Row 2: Overlay toggles */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Overlays</span>
+              <div className="flex items-center gap-2 bg-muted/30 rounded-md px-2 py-0.5">
+                {[
+                  { id: 'tpsl', label: 'TP/SL', val: showPositions, set: setShowPositions },
+                  { id: 'liqs', label: 'Liqs', val: showLiquidations, set: setShowLiquidations },
+                  { id: 'ords', label: 'Orders', val: showRecentOrders, set: setShowRecentOrders },
+                  { id: 'vwap', label: 'VWAP', val: showVWAP, set: setShowVWAP },
+                  { id: 'fr', label: 'FR', val: showFundingRate, set: setShowFundingRate },
+                ].map((o, i) => (
+                  <React.Fragment key={o.id}>
+                    {i > 0 && <div className="h-3.5 w-px bg-border" />}
+                    <div className="flex items-center gap-1">
+                      <Checkbox id={o.id} checked={o.val} onCheckedChange={c => o.set(c as boolean)} className="h-3.5 w-3.5" />
+                      <Label htmlFor={o.id} className="text-xs cursor-pointer">{o.label}</Label>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+              {showLiquidations && (
+                <div className="flex items-center gap-1.5 bg-muted/30 rounded-md px-2 py-0.5">
+                  <span className="text-[10px] text-muted-foreground">Group</span>
+                  <Select value={liqGrouping} onValueChange={setLiqGrouping}>
+                    <SelectTrigger className="h-7 w-[60px] text-xs border bg-background"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {LIQ_GROUPINGS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Row 3: Drawing tools */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setShowDrawingTools(v => !v)}
+                className={cn(
+                  'text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors',
+                  showDrawingTools ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                ✏ Draw
+              </button>
+              {showDrawingTools && (
+                <>
+                  <div className="flex gap-0.5 bg-muted/30 rounded-md p-0.5 flex-wrap">
+                    {DRAWING_TOOLS.map(tool => (
+                      <button
+                        key={tool.name}
+                        onClick={() => handleDrawingTool(tool.name)}
+                        title={tool.label}
+                        className={cn(
+                          'px-1.5 py-0.5 text-xs rounded transition-colors',
+                          activeDrawingTool === tool.name
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
+                        )}
+                      >
+                        {tool.icon}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={clearDrawings}
+                    className="text-[10px] text-destructive hover:text-destructive/80 px-1.5 py-0.5 rounded bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                    title="Clear all drawings"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </CardHeader>
+
+      {isVisible && (
+        <CardContent className="px-2 sm:px-3 pb-2">
+          {/* Chart container — ALWAYS in DOM. Loading/error shown as overlay. */}
+          <div className="relative rounded-md border border-border overflow-hidden" style={{ height: 550 }}>
+            {/* The actual KLineChart mounts here */}
+            <div
+              ref={containerRef}
+              className="absolute inset-0 bg-[#1a1a1a]"
+            />
+
+            {/* Loading overlay */}
+            {loading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/80">
+                <div className="text-center">
+                  <Loader2 className="h-6 w-6 mx-auto mb-1.5 animate-spin text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Loading chart...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error overlay */}
+            {error && !loading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1a1a1a]/80">
+                <div className="text-center">
+                  <p className="text-xs text-destructive mb-2">{error}</p>
+                  <Button variant="outline" size="sm" onClick={handleRefresh}>Retry</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Historical loading indicator */}
+            {isLoadingHistorical && (
+              <div className="absolute top-2 left-2 z-10 bg-background/90 border rounded px-2.5 py-1 flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="text-[10px] text-muted-foreground">Loading history...</span>
+              </div>
+            )}
+
+            {/* Funding rate hover */}
+            {showFundingRate && fundingRateHover && (
+              <div className="absolute top-2 right-2 z-10 bg-cyan-950/90 border border-cyan-700/50 rounded px-2 py-0.5">
+                <span className="text-[10px] font-mono text-cyan-400">FR: {fundingRateHover}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}

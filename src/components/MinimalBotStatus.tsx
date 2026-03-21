@@ -13,21 +13,21 @@ interface HealthState {
 }
 
 export default function MinimalBotStatus() {
-  const { isConnected } = useBotStatus();
+  const { connectionState } = useBotStatus();
   const [health, setHealth] = useState<HealthState | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   // Track previous connection state to reset dismissed flag on reconnect
-  const [wasConnected, setWasConnected] = useState(false);
+  const [wasLive, setWasLive] = useState(false);
 
   useEffect(() => {
-    if (isConnected && !wasConnected) {
-      setWasConnected(true);
+    if (connectionState === 'live' && !wasLive) {
+      setWasLive(true);
       setDismissed(false); // re-show any banner when reconnected
-    } else if (!isConnected) {
-      setWasConnected(false);
+    } else if (connectionState !== 'live') {
+      setWasLive(false);
     }
-  }, [isConnected, wasConnected]);
+  }, [connectionState, wasLive]);
 
   useEffect(() => {
     const cleanup = websocketService.addMessageHandler((msg) => {
@@ -41,21 +41,6 @@ export default function MinimalBotStatus() {
 
   // Nothing to show — everything is fine
   if (dismissed) return null;
-  if (isConnected && (!health || !health.isPaused)) return null;
-
-  // WS disconnected
-  if (!isConnected) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-red-950/80 border-b border-red-800 text-red-200 text-xs">
-        <WifiOff className="h-3.5 w-3.5 shrink-0" />
-        <span className="font-medium">Bot disconnected</span>
-        <span className="text-red-400">— real-time prices and position updates are unavailable. Check the bot service.</span>
-        <button onClick={() => setDismissed(true)} className="ml-auto text-red-400 hover:text-red-200">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
-  }
 
   // Bot blocked / trading paused
   if (health?.isPaused) {
@@ -69,8 +54,38 @@ export default function MinimalBotStatus() {
         <ShieldOff className="h-3.5 w-3.5 shrink-0 text-orange-400" />
         <span className="font-medium text-orange-300">Trading paused</span>
         <span className="text-orange-400">— {reason}</span>
-        <span className="text-orange-500 italic ml-1">Close losing positions or raise the threshold in Config → Global Settings to resume.</span>
+        <span className="text-orange-500 italic ml-1">Adjust risk settings or close the losing position to resume.</span>
         <button onClick={() => setDismissed(true)} className="ml-auto text-orange-500 hover:text-orange-200">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  if (connectionState === 'live') return null;
+
+  // Last known status is still available, but live updates are interrupted
+  if (connectionState === 'degraded') {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2 bg-amber-950/70 border-b border-amber-800 text-amber-100 text-xs">
+        <WifiOff className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-medium">Live connection interrupted</span>
+        <span className="text-amber-300">— showing the last known bot state while live updates reconnect.</span>
+        <button onClick={() => setDismissed(true)} className="ml-auto text-amber-300 hover:text-amber-100">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  // No live connection and no bot snapshot yet
+  if (connectionState === 'offline') {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2 bg-slate-950/70 border-b border-slate-800 text-slate-200 text-xs">
+        <WifiOff className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-medium">Waiting for bot connection</span>
+        <span className="text-slate-400">— the dashboard is still loading snapshot data.</span>
+        <button onClick={() => setDismissed(true)} className="ml-auto text-slate-400 hover:text-slate-200">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

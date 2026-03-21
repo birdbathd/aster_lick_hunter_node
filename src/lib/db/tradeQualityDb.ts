@@ -259,6 +259,12 @@ class TradeQualityDatabase {
     return result.lastInsertRowid as number;
   }
 
+  // Mark a signal as executed after order is placed
+  markSignalExecuted(signalId: number): void {
+    const db = this.getDb();
+    db.prepare('UPDATE trade_quality_signals SET was_executed = 1 WHERE id = ?').run(signalId);
+  }
+
   // Get recent trade signals
   getRecentSignals(options: {
     limit?: number;

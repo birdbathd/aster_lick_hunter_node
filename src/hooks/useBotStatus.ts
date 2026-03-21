@@ -13,9 +13,12 @@ export interface BotStatus {
   errors: string[];
 }
 
+export type BotConnectionState = 'live' | 'degraded' | 'offline';
+
 export interface UseBotStatusReturn {
   status: BotStatus | null;
   isConnected: boolean;
+  connectionState: BotConnectionState;
   lastMessage: string | null;
   reconnect: () => void;
 }
@@ -72,9 +75,6 @@ export function useBotStatus(): UseBotStatusReturn {
     // Add connection listener to track connection state
     const connectionCleanup = websocketService.addConnectionListener((connected) => {
       setIsConnected(connected);
-      if (!connected) {
-        setStatus(null);
-      }
     });
 
     return () => {
@@ -86,6 +86,7 @@ export function useBotStatus(): UseBotStatusReturn {
   return {
     status,
     isConnected,
+    connectionState: isConnected ? 'live' : status ? 'degraded' : 'offline',
     lastMessage,
     reconnect,
   };

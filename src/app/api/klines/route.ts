@@ -37,9 +37,9 @@ export async function GET(request: NextRequest) {
 
     const klines = await getKlines(symbol, interval, limit, endTime ? parseInt(endTime) : undefined);
 
-    // Transform to lightweight-charts format: [timestamp, open, high, low, close, volume]
+    // Keep exchange openTime in milliseconds so it matches klinecharts expectations.
     const chartData = klines.map(kline => [
-      Math.floor(kline.openTime / 1000), // Convert to seconds for TradingView
+      kline.openTime,
       parseFloat(kline.open),
       parseFloat(kline.high),
       parseFloat(kline.low),
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     // Filter by since parameter if provided
     const filteredData = since 
-      ? chartData.filter(([timestamp]) => timestamp >= parseInt(since) / 1000)
+      ? chartData.filter(([timestamp]) => timestamp >= parseInt(since))
       : chartData;
 
     return NextResponse.json({

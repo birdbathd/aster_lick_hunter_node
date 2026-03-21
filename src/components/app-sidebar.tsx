@@ -38,7 +38,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useConfig } from "@/components/ConfigProvider"
 import { useBotStatus } from "@/hooks/useBotStatus"
-import websocketService from '@/lib/services/websocketService'
 import dataStore from '@/lib/services/dataStore'
 import { VersionChecker } from '@/components/VersionChecker'
 
@@ -94,7 +93,7 @@ const navigation = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { config } = useConfig()
-  const { status, isConnected } = useBotStatus()
+  const { status, connectionState } = useBotStatus()
   const [positions, setPositions] = React.useState<any[]>([])
   const [isMounted, setIsMounted] = React.useState(false)
   const isPaperMode = config?.global?.paperMode
@@ -118,34 +117,24 @@ export function AppSidebar() {
 
     dataStore.on('positions:update', handlePositionsUpdate)
 
-    // Forward WebSocket messages to data store
-    const handleMessage = (message: any) => {
-      dataStore.handleWebSocketMessage(message)
-    }
-
-    const cleanup = websocketService.addMessageHandler(handleMessage)
-
     return () => {
       dataStore.off('positions:update', handlePositionsUpdate)
-      cleanup()
     }
   }, [])
 
 
   const getStatusColor = () => {
-    // On non-dashboard pages, show neutral color instead of red
-    const isNonDashboardPage = pathname !== '/' && pathname !== '';
-    if (!isConnected) return isNonDashboardPage ? 'bg-gray-400' : 'bg-red-500'
-    if (!status?.isRunning) return 'bg-yellow-500'
-    return 'bg-green-500'
+    if (connectionState === 'live') {
+      return status?.isRunning ? 'bg-green-500' : 'bg-emerald-400';
+    }
+    if (connectionState === 'degraded') return 'bg-amber-500';
+    return 'bg-slate-400';
   }
 
   const getStatusText = () => {
-    // On non-dashboard pages, show "Idle" instead of alarming "Disconnected"
-    const isNonDashboardPage = pathname !== '/' && pathname !== '';
-    if (!isConnected) return isNonDashboardPage ? 'Idle' : 'Disconnected'
-    if (!status?.isRunning) return 'Connected'
-    return 'Running'
+    if (connectionState === 'live') return status?.isRunning ? 'Live' : 'Connected'
+    if (connectionState === 'degraded') return 'Degraded'
+    return 'Offline'
   }
 
   return (
@@ -199,13 +188,13 @@ export function AppSidebar() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
                 <div className="flex items-center gap-2">
-                  <Circle className={`h-2 w-2 fill-current ${getStatusColor()} ${isConnected && status?.isRunning ? 'animate-pulse' : ''}`} />
+                  <Circle className={`h-2 w-2 fill-current ${getStatusColor()} ${connectionState === 'live' && status?.isRunning ? 'animate-pulse' : ''}`} />
                   <span className="text-sm font-medium">{getStatusText()}</span>
                 </div>
               </div>
 
               {/* Mode */}
-              {isConnected && status && (
+              {status && (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Mode</span>
@@ -226,7 +215,7 @@ export function AppSidebar() {
               )}
 
               {/* Rate Limits */}
-              {isConnected && (
+              {connectionState !== 'offline' && (
                 <div className="mt-2 pt-2 border-t border-sidebar-border">
                   <RateLimitSidebar />
                 </div>
@@ -273,26 +262,34 @@ export function AppSidebar() {
       <SidebarFooter>
         <div className="space-y-1">
           {/* Connection Status */}
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            <div className="flex items-center justify-between">
-              <span>Connection</span>
-              <div className="flex items-center gap-1">
-                {isConnected ? (
-                  <>
-                    <Activity className="h-3 w-3 text-green-500 animate-pulse" />
-                    <span className="text-green-500">Connected</span>
-                  </>
-                ) : (
-                  <>
-                    <Activity className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">
-                      {pathname !== '/' && pathname !== '' ? 'Idle' : 'Disconnected'}
-                    </span>
-                  </>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>Connection</span>
+                  <div className="flex items-center gap-1">
+                    {connectionState === 'live' ? (
+                      <>
+                        <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+                        <span className="text-green-500">Live</span>
+                      </>
+                    ) : connectionState === 'degraded' ? (
+                      <>
+                        <Activity className="h-3 w-3 text-amber-500" />
+                        <span className="text-amber-500">Degraded</span>
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Offline</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {connectionState === 'degraded' && (
+                  <div className="mt-1 text-[10px] text-muted-foreground">
+                    Using the last known bot snapshot
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
 
           {/* Version Status */}
           <VersionChecker />

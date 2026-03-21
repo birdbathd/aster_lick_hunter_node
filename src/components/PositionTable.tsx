@@ -216,12 +216,8 @@ export default function PositionTable({
         dataStore.off('markPrices:update', handleMarkPricesUpdate);
       };
 
-      // Forward WebSocket messages to data store and handle VWAP
+      // Handle VWAP and related overlays
       const handleWebSocketMessage = (message: any) => {
-        // Forward to data store for balance/position/mark price updates
-        dataStore.handleWebSocketMessage(message);
-
-        // Handle VWAP updates separately (not in data store)
         if (message.type === 'vwap_update') {
           const data = message.data;
           if (data && data.symbol) {
@@ -316,16 +312,20 @@ export default function PositionTable({
   }, [positions.length, loadVWAPData]); // Include loadVWAPData dependency
 
   // Load scale out status for all positions on mount and when position count changes
-  useEffect(() => {
-    const displayedPositions = positions.length > 0 ? positions : realPositions;
-    if (displayedPositions.length === 0) return;
+  const displayedPositions = useMemo(() => {
+    return positions.length > 0 ? positions : realPositions;
+  }, [positions, realPositions]);
 
-    // Filter to only positions we haven't checked yet
-    const uncheckedPositions = displayedPositions.filter(p => {
+  const uncheckedPositions = useMemo(() => {
+    return displayedPositions.filter(p => {
       const key = `${p.symbol}_${p.side}`;
       return !(key in protectionStatus);
     });
-    
+  }, [displayedPositions, protectionStatus]);
+
+  useEffect(() => {
+    if (displayedPositions.length === 0) return;
+
     // Only check if we have new positions we haven't checked yet
     if (uncheckedPositions.length === 0) return;
 
@@ -359,7 +359,7 @@ export default function PositionTable({
     // Small delay to batch requests after component mounts
     const timer = setTimeout(checkStatuses, 100);
     return () => clearTimeout(timer);
-  }, [positions.length, realPositions.length]); // Removed protectionStatus from deps
+  }, [displayedPositions, uncheckedPositions]);
 
 
   // Handle close position
@@ -453,6 +453,36 @@ export default function PositionTable({
     });
   }, []);
 
+  const handleDeactivateProtection = useCallback(async (position: Position) => {
+    try {
+      const response = await fetch('/api/positions/scale-out/deactivate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: position.symbol,
+          side: position.side,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`Scale out deactivated for ${position.symbol}`);
+        const key = `${position.symbol}_${position.side}`;
+        setProtectionStatus(prev => ({ ...prev, [key]: false }));
+      } else {
+        throw new Error(result.error || 'Failed to deactivate scale out');
+      }
+    } catch (error: any) {
+      console.error('[PositionTable] Error deactivating scale out:', error);
+      toast.error(`Failed to deactivate scale out`, {
+        description: error.message || 'Unknown error occurred',
+      });
+    }
+  }, []);
+
   // Handle protect position
   const handleProtectPosition = useCallback((position: Position) => {
     const key = `${position.symbol}_${position.side}`;
@@ -473,7 +503,7 @@ export default function PositionTable({
         },
       });
     }
-  }, [protectionStatus]);
+  }, [protectionStatus, handleDeactivateProtection]);
 
   // Handle add to position
   const handleAddToPosition = useCallback((position: Position) => {
@@ -537,36 +567,6 @@ export default function PositionTable({
       );
     }
   }, [reducePositionModal, formatQuantity]);
-
-  const handleDeactivateProtection = useCallback(async (position: Position) => {
-    try {
-      const response = await fetch('/api/positions/scale-out/deactivate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          symbol: position.symbol,
-          side: position.side,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success(`Scale out deactivated for ${position.symbol}`);
-        const key = `${position.symbol}_${position.side}`;
-        setProtectionStatus(prev => ({ ...prev, [key]: false }));
-      } else {
-        throw new Error(result.error || 'Failed to deactivate scale out');
-      }
-    } catch (error: any) {
-      console.error('[PositionTable] Error deactivating scale out:', error);
-      toast.error(`Failed to deactivate scale out`, {
-        description: error.message || 'Unknown error occurred',
-      });
-    }
-  }, []);
 
   const handleProtectConfirm = useCallback(async (settings: ScaleOutSettings) => {
     if (!protectPositionModal.position) return;

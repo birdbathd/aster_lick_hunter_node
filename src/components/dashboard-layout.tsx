@@ -16,6 +16,8 @@ import { LogOut } from "lucide-react"
 import { useConfig } from "@/components/ConfigProvider"
 import { useAuth } from "@/components/AuthProvider"
 import { RateLimitBarCompact } from "@/components/RateLimitBar"
+import websocketService from "@/lib/services/websocketService"
+import dataStore from "@/lib/services/dataStore"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -25,6 +27,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const _router = useRouter();
   const { config: _config } = useConfig();
   const { signOut } = useAuth();
+
+  React.useEffect(() => {
+    const cleanup = websocketService.addMessageHandler((message) => {
+      dataStore.handleWebSocketMessage(message);
+    });
+
+    return cleanup;
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -39,15 +49,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3 md:px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
 
           {/* Open Beta Warning */}
-          <div className="hidden md:flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400">
-            <span>⚠️</span>
-            <span className="font-medium">OPEN BETA</span>
-            <span className="text-muted-foreground">- Only use what you can afford to lose</span>
+          <div className="hidden xl:flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-300">
+            <span>OPEN BETA</span>
+            <span className="text-muted-foreground font-normal">Use only what you can afford to lose</span>
           </div>
 
           {/* Rate Limit Compact Bar */}
@@ -59,7 +68,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex flex-1 items-center justify-end">
             <div className="flex items-center gap-2 md:gap-4">
               {/* External Links */}
-              <div className="flex items-center gap-2 md:gap-3">
+              <div className="hidden md:flex items-center gap-2 md:gap-3">
                 {/* GitHub */}
                 <Link
                   href="https://github.com/CryptoGnome/aster_lick_hunter_node"

@@ -2,11 +2,15 @@
 export interface CachedKlineData {
   symbol: string;
   interval: string;
-  data: number[][]; // [timestamp, open, high, low, close, volume]
+  data: number[][]; // [timestamp(ms), open, high, low, close, volume]
   lastUpdate: number;
   lastCandleTime: number;
   earliestCandleTime: number; // Track oldest loaded candle
 }
+
+const normalizeTimestampMs = (timestamp: number): number => {
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+};
 
 // Calculate candles needed for 7 days based on timeframe
 export const getCandlesFor7Days = (interval: string): number => {
@@ -79,8 +83,8 @@ export const setCachedKlines = (symbol: string, interval: string, data: number[]
     interval,
     data: sortedData,
     lastUpdate: now,
-    lastCandleTime: sortedData[sortedData.length - 1][0] * 1000, // Convert back to milliseconds
-    earliestCandleTime: sortedData[0][0] * 1000 // Track oldest loaded candle
+    lastCandleTime: normalizeTimestampMs(sortedData[sortedData.length - 1][0]),
+    earliestCandleTime: normalizeTimestampMs(sortedData[0][0])
   };
   
   klineCache.set(key, cached);
@@ -111,8 +115,8 @@ export const updateCachedKlines = (symbol: string, interval: string, newData: nu
     interval,
     data: trimmedData,
     lastUpdate: Date.now(),
-    lastCandleTime: trimmedData[trimmedData.length - 1][0] * 1000,
-    earliestCandleTime: trimmedData[0][0] * 1000
+    lastCandleTime: normalizeTimestampMs(trimmedData[trimmedData.length - 1][0]),
+    earliestCandleTime: normalizeTimestampMs(trimmedData[0][0])
   };
   
   klineCache.set(key, updated);
@@ -140,8 +144,8 @@ export const prependHistoricalKlines = (symbol: string, interval: string, histor
     interval,
     data: combinedData,
     lastUpdate: Date.now(),
-    lastCandleTime: combinedData[combinedData.length - 1][0] * 1000,
-    earliestCandleTime: combinedData[0][0] * 1000
+    lastCandleTime: normalizeTimestampMs(combinedData[combinedData.length - 1][0]),
+    earliestCandleTime: normalizeTimestampMs(combinedData[0][0])
   };
   
   klineCache.set(key, updated);

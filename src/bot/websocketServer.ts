@@ -27,6 +27,7 @@ export interface BotStatus {
 export class StatusBroadcaster extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private clients: Set<WebSocket> = new Set();
+  private starting = false;
   private status: BotStatus = {
     isRunning: false,
     paperMode: true,
@@ -45,8 +46,27 @@ export class StatusBroadcaster extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    if (this.wss || this.starting) {
+      return;
+    }
+
+    this.starting = true;
+
     try {
-      this.wss = new WebSocketServer({ port: this.port });
+      this.wss = await new Promise<WebSocketServer>((resolve, reject) => {
+        const server = new WebSocketServer({ port: this.port });
+        const handleListening = () => {
+          server.off('error', handleError);
+          resolve(server);
+        };
+        const handleError = (error: Error) => {
+          server.off('listening', handleListening);
+          reject(error);
+        };
+
+        server.once('listening', handleListening);
+        server.once('error', handleError);
+      });
 
       this.wss.on('connection', (ws: WebSocket) => {
         console.log('📱 Web UI connected to bot');
@@ -158,7 +178,10 @@ export class StatusBroadcaster extends EventEmitter {
 
       console.log(`📡 WebSocket server running on port ${this.port}`);
     } catch (error) {
-      console.error('Failed to start WebSocket server:', error);
+      this.wss = null;
+      throw error;
+    } finally {
+      this.starting = false;
     }
   }
 

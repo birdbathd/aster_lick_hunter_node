@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Flame, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown } from 'lucide-react';
 import websocketService from '@/lib/services/websocketService';
 import { gsap } from 'gsap';
 
@@ -33,11 +33,6 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
-  const _containerRef = useRef<HTMLDivElement>(null);
-  const prevEventsRef = useRef<LiquidationEvent[]>([]);
-  
-  // Generate unique instance ID for debugging
-  const instanceId = useRef(Math.random().toString(36).substring(7));
 
   // Use refs to track current prop values without causing re-subscriptions
   const volumeThresholdsRef = useRef(volumeThresholds);
@@ -51,17 +46,12 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
 
   // Load historical liquidations on mount
   useEffect(() => {
-    console.log(`[LiquidationSidebar:${instanceId.current}] Historical liquidation useEffect triggered`);
-    
     const loadHistoricalLiquidations = async () => {
       try {
-        console.log(`[LiquidationSidebar:${instanceId.current}] Fetching historical liquidations from API...`);
         const response = await fetch(`/api/liquidations?limit=${maxEventsRef.current}`);
-        console.log(`[LiquidationSidebar:${instanceId.current}] API response status:`, response.status);
         
         if (response.ok) {
           const result = await response.json();
-          console.log(`[LiquidationSidebar:${instanceId.current}] API response:`, result);
           
           if (result.success && result.data) {
             const historicalEvents = result.data.map((liq: any) => {
@@ -81,16 +71,11 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
                 isHighVolume: volume >= threshold,
               };
             });
-            console.log(`[LiquidationSidebar:${instanceId.current}] Loaded ${historicalEvents.length} historical liquidations`);
             setEvents(historicalEvents);
-          } else {
-            console.log(`[LiquidationSidebar:${instanceId.current}] No data in API response or unsuccessful`);
           }
-        } else {
-          console.error(`[LiquidationSidebar:${instanceId.current}] API request failed with status:`, response.status);
         }
       } catch (error) {
-        console.error(`[LiquidationSidebar:${instanceId.current}] Failed to load historical liquidations:`, error);
+        console.error('[LiquidationSidebar] Failed to load historical liquidations:', error);
       } finally {
         setIsLoading(false);
       }
@@ -101,11 +86,8 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
 
   // Handle WebSocket messages for real-time updates - Subscribe ONCE on mount
   useEffect(() => {
-    console.log(`[LiquidationSidebar:${instanceId.current}] Subscribing to WebSocket`);
-    
     const handleMessage = (message: any) => {
       if (message.type === 'liquidation') {
-        console.log(`[LiquidationSidebar:${instanceId.current}] Received liquidation:`, message.data?.symbol, 'eventTime:', message.data?.eventTime);
         const liquidationData = message.data;
 
         // Calculate volume and determine if high volume (use ref for latest threshold)
@@ -130,7 +112,6 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
           );
           
           if (isDuplicate) {
-            console.log(`[LiquidationSidebar:${instanceId.current}] Duplicate liquidation detected, skipping:`, eventId);
             return prev;
           }
           
@@ -138,7 +119,6 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
           setNewEventIds(prevIds => new Set([...prevIds, eventId]));
 
           const newEvents = [liquidationEvent, ...prev].slice(0, maxEventsRef.current);
-          prevEventsRef.current = newEvents;
           return newEvents;
         });
 
@@ -163,7 +143,6 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
     const cleanupConnectionListener = websocketService.addConnectionListener(handleConnectionChange);
 
     return () => {
-      console.log(`[LiquidationSidebar:${instanceId.current}] Cleaning up WebSocket subscription`);
       cleanupMessageHandler();
       cleanupConnectionListener();
     };
@@ -212,12 +191,12 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
   };
 
   return (
-    <div className="w-72 border-l bg-card/50 backdrop-blur-sm hidden lg:block h-full overflow-hidden">
+    <div className="w-72 border-l bg-card/35 backdrop-blur-sm hidden lg:block h-full overflow-hidden">
       <div className="h-full flex flex-col">
-        <div className="border-b p-3 flex-shrink-0">
+        <div className="border-b px-3 py-2 flex-shrink-0 bg-background/40">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">Liquidations</h3>
-            <Badge variant={isConnected ? "default" : "secondary"} className="flex items-center gap-1 text-xs h-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Liquidations</h3>
+            <Badge variant={isConnected ? "default" : "secondary"} className="flex items-center gap-1 text-[10px] h-5 px-1.5">
               <Activity className={`h-2 w-2 ${isConnected ? 'animate-pulse' : ''}`} />
               {isConnected ? 'Live' : 'Offline'}
             </Badge>
@@ -226,7 +205,7 @@ export default function LiquidationSidebar({ volumeThresholds = {}, maxEvents = 
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           {isLoading ? (
             Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-1.5 border-b">
+              <div key={i} className="flex items-center justify-between px-3 py-1 border-b">
                 <Skeleton className="h-4 w-20" />
                 <Skeleton className="h-4 w-16" />
               </div>
@@ -315,290 +294,27 @@ function LiquidationItem({
     if (isNew && itemRef.current) {
       const element = itemRef.current;
 
-      // Choose animation based on volume
-      if (event.volume >= 5000000) {
-        // Mega liquidation - explosive entrance with neon wave effect
-        gsap.fromTo(element,
-          {
-            scale: 0,
-            opacity: 0,
-            rotationY: 180,
-            x: 100,
-          },
-          {
-            scale: 1,
-            opacity: 1,
-            rotationY: 0,
-            x: 0,
-            duration: 0.8,
-            ease: "elastic.out(1, 0.5)",
-            onComplete: () => {
-              // Neon wave effect - create a traveling wave across the card
-              const waveTimeline = gsap.timeline();
-
-              // Create wave effect with multiple gradient positions
-              waveTimeline
-                .to(element, {
-                  background: isLongLiquidation
-                    ? "linear-gradient(90deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.8) 20%, rgba(34,197,94,0.9) 40%, rgba(34,197,94,0.8) 60%, rgba(34,197,94,0.1) 100%)"
-                    : "linear-gradient(90deg, rgba(239,68,68,0.1) 0%, rgba(239,68,68,0.8) 20%, rgba(239,68,68,0.9) 40%, rgba(239,68,68,0.8) 60%, rgba(239,68,68,0.1) 100%)",
-                  duration: 0.3,
-                  ease: "power2.inOut"
-                })
-                .to(element, {
-                  background: isLongLiquidation
-                    ? "linear-gradient(90deg, rgba(34,197,94,0.1) 20%, rgba(34,197,94,0.9) 40%, rgba(34,197,94,1) 60%, rgba(34,197,94,0.9) 80%, rgba(34,197,94,0.1) 100%)"
-                    : "linear-gradient(90deg, rgba(239,68,68,0.1) 20%, rgba(239,68,68,0.9) 40%, rgba(239,68,68,1) 60%, rgba(239,68,68,0.9) 80%, rgba(239,68,68,0.1) 100%)",
-                  duration: 0.3,
-                  ease: "power2.inOut"
-                })
-                .to(element, {
-                  background: isLongLiquidation
-                    ? "linear-gradient(90deg, rgba(34,197,94,0.1) 40%, rgba(34,197,94,0.8) 60%, rgba(34,197,94,0.9) 80%, rgba(34,197,94,0.8) 100%, rgba(34,197,94,0.1) 120%)"
-                    : "linear-gradient(90deg, rgba(239,68,68,0.1) 40%, rgba(239,68,68,0.8) 60%, rgba(239,68,68,0.9) 80%, rgba(239,68,68,0.8) 100%, rgba(239,68,68,0.1) 120%)",
-                  duration: 0.3,
-                  ease: "power2.inOut"
-                })
-                .to(element, {
-                  backgroundColor: isLongLiquidation ? "rgba(34, 197, 94, 0.25)" : "rgba(239, 68, 68, 0.25)",
-                  duration: 0.4,
-                  ease: "power2.out"
-                });
-
-              // Add intense pulsing glow
-              gsap.to(element, {
-                boxShadow: isLongLiquidation
-                  ? "0 0 40px rgba(34, 197, 94, 0.8), 0 0 20px rgba(34, 197, 94, 0.6)"
-                  : "0 0 40px rgba(239, 68, 68, 0.8), 0 0 20px rgba(239, 68, 68, 0.6)",
-                duration: 0.6,
-                yoyo: true,
-                repeat: 5,
-                ease: "power2.inOut"
-              });
-
-              // Breathing effect that continues
-              gsap.to(element, {
-                scale: 1.02,
-                duration: 1.5,
-                yoyo: true,
-                repeat: -1,
-                ease: "sine.inOut",
-                delay: 1.5
-              });
-            }
-          }
-        );
-      } else if (event.volume >= 1000000) {
-        // Large liquidation - enhanced bounce with strong pulse
-        gsap.fromTo(element,
-          {
-            y: -50,
-            opacity: 0,
-            scale: 1.5,
-          },
-          {
-            y: 0,
-            opacity: 1,
-            scale: 1,
-            duration: 0.6,
-            ease: "bounce.out",
-            onComplete: () => {
-              // Enhanced pulsing effect
-              const pulseTimeline = gsap.timeline();
-
-              pulseTimeline
-                .to(element, {
-                  scale: 1.08,
-                  backgroundColor: isLongLiquidation
-                    ? "rgba(34, 197, 94, 0.5)"
-                    : "rgba(239, 68, 68, 0.5)",
-                  boxShadow: isLongLiquidation
-                    ? "0 0 25px rgba(34, 197, 94, 0.6)"
-                    : "0 0 25px rgba(239, 68, 68, 0.6)",
-                  duration: 0.3,
-                  ease: "power2.out"
-                })
-                .to(element, {
-                  scale: 0.98,
-                  backgroundColor: isLongLiquidation
-                    ? "rgba(34, 197, 94, 0.2)"
-                    : "rgba(239, 68, 68, 0.2)",
-                  boxShadow: isLongLiquidation
-                    ? "0 0 10px rgba(34, 197, 94, 0.3)"
-                    : "0 0 10px rgba(239, 68, 68, 0.3)",
-                  duration: 0.4,
-                  ease: "power2.inOut"
-                })
-                .to(element, {
-                  scale: 1.05,
-                  backgroundColor: isLongLiquidation
-                    ? "rgba(34, 197, 94, 0.35)"
-                    : "rgba(239, 68, 68, 0.35)",
-                  boxShadow: isLongLiquidation
-                    ? "0 0 20px rgba(34, 197, 94, 0.5)"
-                    : "0 0 20px rgba(239, 68, 68, 0.5)",
-                  duration: 0.3,
-                  ease: "power2.out"
-                })
-                .to(element, {
-                  scale: 1,
-                  backgroundColor: isLongLiquidation
-                    ? "rgba(34, 197, 94, 0.2)"
-                    : "rgba(239, 68, 68, 0.2)",
-                  boxShadow: "none",
-                  duration: 0.5,
-                  ease: "power2.out"
-                });
-
-              // Subtle continuing pulse
-              gsap.to(element, {
-                scale: 1.01,
-                duration: 2,
-                yoyo: true,
-                repeat: 3,
-                ease: "sine.inOut",
-                delay: 1.5
-              });
-            }
-          }
-        );
-      } else if (event.volume >= 500000) {
-        // Medium liquidation - slide and zoom with gentle pulse
-        gsap.fromTo(element,
-          {
-            x: 300,
-            opacity: 0,
-            scale: 0.5,
-          },
-          {
-            x: 0,
-            opacity: 1,
-            scale: 1,
-            duration: 0.5,
-            ease: "power3.out",
-            onComplete: () => {
-              // Gentle pulse for medium liquidations
-              gsap.to(element, {
-                scale: 1.03,
-                backgroundColor: isLongLiquidation
-                  ? "rgba(34, 197, 94, 0.3)"
-                  : "rgba(239, 68, 68, 0.3)",
-                duration: 0.4,
-                yoyo: true,
-                repeat: 1,
-                ease: "power2.inOut"
-              });
-            }
-          }
-        );
-      } else if (event.volume >= 100000) {
-        // Significant liquidation - fade slide
-        gsap.fromTo(element,
-          {
-            x: 100,
-            opacity: 0,
-          },
-          {
-            x: 0,
-            opacity: 1,
-            duration: 0.4,
-            ease: "power2.out",
-          }
-        );
-      } else if (event.volume >= 10000) {
-        // Notable liquidation ($10K+) - slide in with subtle glow
-        gsap.fromTo(element,
-          {
-            x: 50,
-            opacity: 0,
-            scale: 0.9,
-          },
-          {
-            x: 0,
-            opacity: 1,
-            scale: 1,
-            duration: 0.35,
-            ease: "power2.out",
-            onComplete: () => {
-              // Subtle highlight effect
-              gsap.to(element, {
-                backgroundColor: isLongLiquidation
-                  ? "rgba(34, 197, 94, 0.15)"
-                  : "rgba(239, 68, 68, 0.15)",
-                boxShadow: isLongLiquidation
-                  ? "0 0 8px rgba(34, 197, 94, 0.2)"
-                  : "0 0 8px rgba(239, 68, 68, 0.2)",
-                duration: 0.3,
-                yoyo: true,
-                repeat: 1,
-                ease: "power2.inOut"
-              });
-            }
-          }
-        );
-      } else if (event.volume >= 1000) {
-        // Small liquidation ($1K+) - gentle slide with micro scale
-        gsap.fromTo(element,
-          {
-            x: 20,
-            opacity: 0,
-            scale: 0.95,
-          },
-          {
-            x: 0,
-            opacity: 1,
-            scale: 1,
-            duration: 0.25,
-            ease: "power1.out",
-            onComplete: () => {
-              // Very subtle flash
-              gsap.to(element, {
-                backgroundColor: isLongLiquidation
-                  ? "rgba(34, 197, 94, 0.08)"
-                  : "rgba(239, 68, 68, 0.08)",
-                duration: 0.2,
-                yoyo: true,
-                repeat: 1,
-                ease: "power1.inOut"
-              });
-            }
-          }
-        );
-      } else {
-        // Tiny liquidation - simple fade
-        gsap.fromTo(element,
-          {
-            opacity: 0,
-            y: -10,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.3,
-            ease: "power1.out",
-          }
-        );
-      }
-
-      // Enhanced shake animation for very large liquidations
-      if (event.volume >= 1000000) {
-        gsap.to(element, {
-          x: "+=3",
-          rotation: "+=1",
-          duration: 0.08,
-          repeat: 7,
-          yoyo: true,
-          ease: "power1.inOut",
-          delay: 0.5
-        });
-      }
+      gsap.fromTo(element,
+        {
+          opacity: 0,
+          y: 8,
+          scale: 0.99,
+        },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: event.volume >= 1000000 ? 0.25 : event.volume >= 100000 ? 0.22 : 0.18,
+          ease: "power2.out",
+        }
+      );
     }
   }, [isNew, event.volume, isLongLiquidation]);
 
   return (
     <div
       ref={itemRef}
-      className={`flex items-center justify-between px-3 py-1.5 border-b transition-all duration-300 ${bgColor} cursor-default hover:brightness-110`}
+      className={`flex items-center justify-between px-2.5 py-0.75 border-b transition-colors duration-200 ${bgColor} cursor-default hover:bg-accent/10`}
       style={{
         backgroundColor: isLongLiquidation
           ? `rgb(34 197 94 / ${bgOpacity}%)`
@@ -607,34 +323,25 @@ function LiquidationItem({
         borderLeftColor: isLongLiquidation ? 'rgb(34 197 94)' : 'rgb(239 68 68)'
       }}
     >
-      <div className="flex items-center gap-1.5 flex-1">
-        {event.volume >= 1000000 && (
-          <Flame className="h-3 w-3 text-yellow-400 animate-pulse drop-shadow-[0_0_3px_rgba(250,204,21,0.5)]" />
-        )}
-        {event.volume >= 500000 && event.volume < 1000000 && (
-          <AlertTriangle className="h-3 w-3 text-orange-400 animate-pulse" />
-        )}
+      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <div className={`h-2 w-2 rounded-full ${isLongLiquidation ? 'bg-green-400' : 'bg-red-400'} shrink-0`} />
         {isLongLiquidation ? (
-          <TrendingDown className={`h-3 w-3 ${iconColor} ${event.volume >= 100000 ? 'drop-shadow-[0_0_2px_rgba(34,197,94,0.4)]' : ''}`} />
+          <TrendingDown className={`h-3 w-3 ${iconColor}`} />
         ) : (
-          <TrendingUp className={`h-3 w-3 ${iconColor} ${event.volume >= 100000 ? 'drop-shadow-[0_0_2px_rgba(239,68,68,0.4)]' : ''}`} />
+          <TrendingUp className={`h-3 w-3 ${iconColor}`} />
         )}
-        <div className={`text-xs font-bold ${textColor} w-10 ${event.volume >= 500000 ? 'animate-pulse' : ''}`}>
+        <div className={`text-[9px] font-semibold uppercase tracking-wide ${textColor} w-11 shrink-0`}>
           {positionType}
         </div>
-        <div className={`text-xs transition-all ${
-          event.volume >= 1000000 ? 'text-foreground font-bold' :
-          event.volume >= 100000 ? 'text-foreground font-medium' :
-          'text-foreground/70 font-normal'
-        }`}>
+        <div className="text-[11px] font-medium text-foreground truncate">
           {event.symbol.replace('USDT', '')}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <div className={`text-xs font-bold px-1.5 py-0.5 rounded-sm transition-all ${volumeColor} ${intensity.scale}`}>
+        <div className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full transition-colors ${volumeColor}`}>
           {formatVolume(event.volume)}
         </div>
-        <div className={`text-[10px] w-8 text-right ${
+        <div className={`text-[9px] w-8 text-right ${
           event.volume >= 100000 ? 'text-muted-foreground' : 'text-muted-foreground/70'
         }`}>
           {formatTime(event.timestamp)}

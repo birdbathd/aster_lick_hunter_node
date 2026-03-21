@@ -53,6 +53,7 @@ class AsterBot {
   private cleanupScheduler: any = null;
   private positionSizingInterval: NodeJS.Timeout | null = null;
   private fundingRateCollector: FundingRateCollector | null = null;
+  private pendingSignalIds: Map<string, number> = new Map();
 
   constructor() {
     // Will be initialized with config port
@@ -143,6 +144,9 @@ logWarnWithTimestamp('   Please set a strong password immediately at /config');
 
       // Initialize WebSocket server with configured port
       const wsPort = this.config.global.server?.websocketPort || 8080;
+      if (this.statusBroadcaster) {
+        this.statusBroadcaster.stop();
+      }
       this.statusBroadcaster = new StatusBroadcaster(wsPort);
       await this.statusBroadcaster.start();
 logWithTimestamp(`✅ WebSocket status server started on port ${wsPort}`);
@@ -859,9 +863,9 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
         this.statusBroadcaster.broadcastTradeOpportunity(data);
         this.statusBroadcaster.logActivity(`Opportunity: ${data.symbol} ${data.side} - ${data.reason}`);
         
-        // Save to database for persistence
+        // Save to database as NOT YET executed — will be updated when order is confirmed
         try {
-          tradeQualityDb.saveTradeSignal({
+          const signalId = tradeQualityDb.saveTradeSignal({
             symbol: data.symbol,
             side: data.side,
             recommendation: data.qualityRecommendation || data.qualityScore?.recommendation || 'NORMAL',
@@ -875,11 +879,14 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
             confidence: data.confidence || 0,
             reason: data.reason,
             metrics: data.qualityScore?.metrics,
-            wasExecuted: true,
+            wasExecuted: false,
             wasBlocked: false,
             reasons: data.qualityScore?.reasons,
             signalPrice: data.signalPrice || 0
           });
+          // Attach signalId so positionOpened handler can mark it executed
+          const key = `${data.symbol}_${data.side}`;
+          this.pendingSignalIds.set(key, signalId);
         } catch (dbError) {
           logErrorWithTimestamp('Failed to save trade signal to database:', dbError);
         }
@@ -960,6 +967,17 @@ logErrorWithTimestamp('⚠️  Position Manager failed to start:', error.message
 
       this.hunter.on('positionOpened', (data: any) => {
         logWithTimestamp(`📈 Position opened: ${data.symbol} ${data.side} qty=${data.quantity}`);
+
+        // Mark the trade quality signal as executed in DB
+        const signalKey = `${data.symbol}_${data.side}`;
+        const signalId = this.pendingSignalIds.get(signalKey);
+        if (signalId) {
+          try {
+            tradeQualityDb.markSignalExecuted(signalId);
+          } catch (_e) { /* non-blocking */ }
+          this.pendingSignalIds.delete(signalKey);
+        }
+
         this.positionManager?.onNewPosition(data);
         this.statusBroadcaster.broadcastPositionUpdate({
           symbol: data.symbol,
@@ -1124,6 +1142,11 @@ logErrorWithTimestamp('❌ Unhandled rejection at:', promise, 'reason:', reason)
       });
 
     } catch (error) {
+      try {
+        this.statusBroadcaster?.stop();
+      } catch {
+        // Best-effort cleanup on partial startup failure
+      }
 logErrorWithTimestamp('❌ Failed to start bot:', error);
       process.exit(1);
     }

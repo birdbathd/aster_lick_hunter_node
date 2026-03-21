@@ -91,11 +91,6 @@ export default function PerformanceCard() {
           .then(pnlData => setPnlData(pnlData))
           .catch(error => console.error('Failed to refresh PnL data:', error));
       }
-
-      // Forward balance updates to data store
-      if (message.type === 'balance_update') {
-        dataStore.handleWebSocketMessage(message);
-      }
     };
 
     const cleanup = websocketService.addMessageHandler(handleMessage);

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import websocketService from '@/lib/services/websocketService';
 import dataStore from '@/lib/services/dataStore';
 
@@ -97,10 +97,6 @@ export default function PerformanceCardInline() {
           .then(pnlData => setPnlData(pnlData))
           .catch(error => console.error('Failed to refresh PnL data:', error));
       }
-
-      if (message.type === 'balance_update') {
-        dataStore.handleWebSocketMessage(message);
-      }
     };
 
     const cleanup = websocketService.addMessageHandler(handleMessage);
@@ -127,19 +123,17 @@ export default function PerformanceCardInline() {
 
   if (isLoading || !pnlData) {
     return (
-      <div className="flex items-center gap-2">
-        <Clock className="h-4 w-4 text-muted-foreground" />
-        <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground">24h Performance</span>
-          <Skeleton className="h-5 w-24" />
+      <div>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+          <DollarSign className="h-2.5 w-2.5" />
+          <span>24H Profit</span>
         </div>
+        <Skeleton className="h-5 w-24" />
       </div>
     );
   }
 
   const totalPnL = pnlData.metrics.totalPnl;
-  const totalRealizedPnL = pnlData.metrics.totalRealizedPnl;
-  const totalFees = pnlData.metrics.totalCommission + pnlData.metrics.totalFundingFee;
   const totalTrades = pnlData.dailyPnL.reduce((sum, day) => sum + day.tradeCount, 0);
   const isProfit = totalPnL >= 0;
   const returnPercent = totalBalance > 0 ? (totalPnL / totalBalance) * 100 : 0;
@@ -149,61 +143,53 @@ export default function PerformanceCardInline() {
   const barPct = Math.min(Math.abs(returnPercent) / DAILY_TARGET_PCT * 100, 100);
 
   return (
-    <div className="flex items-center gap-2">
-      <Clock className="h-4 w-4 text-muted-foreground" />
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">24h</span>
-          {totalTrades > 0 && (
-            <Badge variant="secondary" className="h-3.5 text-[10px] px-1">
-              {totalTrades} trades
-            </Badge>
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wide">
+        <DollarSign className="h-2.5 w-2.5" />
+        <span>24H Profit</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex items-center gap-1">
+          {isProfit ? (
+            <TrendingUp className="h-3.5 w-3.5 text-green-600" />
+          ) : (
+            <TrendingDown className="h-3.5 w-3.5 text-red-600" />
           )}
+          <span className={`text-base font-semibold tabular-nums ${
+            isProfit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+          }`}>
+            {formatCurrency(totalPnL)}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {isProfit ? (
-              <TrendingUp className="h-3.5 w-3.5 text-green-600" />
-            ) : (
-              <TrendingDown className="h-3.5 w-3.5 text-red-600" />
-            )}
-            <span className={`text-lg font-semibold ${
-              isProfit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-            }`}>
-              {formatCurrency(totalPnL)}
-            </span>
-          </div>
-          <Badge
-            variant={isProfit ? "outline" : "destructive"}
-            className={`h-4 text-[10px] px-1 ${
-              isProfit
-                ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
-                : ''
-            }`}
-          >
-            {formatPercentage(returnPercent)}
-          </Badge>
-          <div className="flex gap-2 text-[10px] text-muted-foreground">
-            <span>Real: {formatCurrency(totalRealizedPnL)}</span>
-            <span>Fees: {formatCurrency(Math.abs(totalFees))}</span>
-          </div>
-        </div>
-        {/* Daily target progress bar (goal: 1% return) */}
-        <div className="relative h-1 w-full min-w-[120px] max-w-[200px] bg-muted rounded-full overflow-hidden" title={`Daily target: ${DAILY_TARGET_PCT}% return`}>
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              isProfit
-                ? barPct >= 100 ? 'bg-green-500' : 'bg-green-400/80'
-                : 'bg-red-500/80'
-            }`}
-            style={{ width: `${barPct}%` }}
-          />
-          {/* Goal marker at 100% (right edge) */}
-          <div className="absolute right-0 top-0 h-full w-px bg-muted-foreground/40" />
-        </div>
-        <span className="text-[9px] text-muted-foreground/60 leading-none">
-          {isProfit ? (barPct >= 100 ? `✓ ${DAILY_TARGET_PCT}% goal hit` : `${(barPct).toFixed(0)}% of ${DAILY_TARGET_PCT}% goal`) : 'below start'}
-        </span>
+        <Badge
+          variant={isProfit ? "outline" : "destructive"}
+          className={`h-4 text-[10px] px-1 ${
+            isProfit
+              ? 'border-green-600 text-green-600 dark:border-green-400 dark:text-green-400'
+              : ''
+          }`}
+        >
+          {formatPercentage(returnPercent)}
+        </Badge>
+        {totalTrades > 0 && (
+          <>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+            <span className="text-[10px] text-muted-foreground tabular-nums">{totalTrades} trades</span>
+          </>
+        )}
+      </div>
+
+      <div className="relative h-1 w-full max-w-[180px] bg-muted rounded-full overflow-hidden" title={`Daily target: ${DAILY_TARGET_PCT}% return`}>
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            isProfit
+              ? barPct >= 100 ? 'bg-green-500' : 'bg-green-400/80'
+              : 'bg-red-500/80'
+          }`}
+          style={{ width: `${barPct}%` }}
+        />
+        <div className="absolute right-0 top-0 h-full w-px bg-muted-foreground/40" />
       </div>
     </div>
   );

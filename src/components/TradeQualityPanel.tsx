@@ -50,6 +50,7 @@ interface TradeOpportunity {
   blockType?: 'QUALITY_FILTER' | 'VWAP_FILTER' | 'CASCADE_PROTECTION';
   timestamp: number;
   signalPrice?: number;
+  wasExecuted?: boolean;
 }
 
 interface FTAExitSignal {
@@ -63,14 +64,34 @@ interface FTAExitSignal {
 
 type SignalFilter = 'ALL' | 'TAKEN' | 'SKIPPED';
 
-export default function TradeQualityPanel({ className, isPassiveMode = false }: { className?: string; isPassiveMode?: boolean }) {
+interface TradeQualityPanelProps {
+  className?: string;
+  isPassiveMode?: boolean;
+  defaultExpanded?: boolean;
+  fillHeight?: boolean;
+  collapsible?: boolean;
+  onSignalClick?: (symbol: string, timestamp: number) => void;
+  onSignalHover?: (symbol: string, timestamp: number) => void;
+  onSignalHoverEnd?: () => void;
+}
+
+export default function TradeQualityPanel({
+  className,
+  isPassiveMode = false,
+  defaultExpanded = false,
+  fillHeight = false,
+  collapsible = true,
+  onSignalClick,
+  onSignalHover,
+  onSignalHoverEnd,
+}: TradeQualityPanelProps) {
   const [recentOpportunities, setRecentOpportunities] = useState<TradeOpportunity[]>([]);
   const [ftaAlerts, setFtaAlerts] = useState<FTAExitSignal[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [expandedSignal, setExpandedSignal] = useState<number | null>(null);
   const [filter, setFilter] = useState<SignalFilter>('ALL');
-  const [showScoreStats, setShowScoreStats] = useState(false);
+  const [showScoreStats, setShowScoreStats] = useState(defaultExpanded || fillHeight);
   const [scoreBreakdown, setScoreBreakdown] = useState<{
     score: number; label: string; trades: number; winRate: number;
     avgPnlPct: number; avgMaePct: number; avgMfePct: number;
@@ -81,9 +102,26 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
     if (message.type === 'trade_opportunity') {
       const opportunity: TradeOpportunity = {
         ...message.data,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        wasExecuted: false, // tentative until confirmed by order_placed
       };
       setRecentOpportunities(prev => [opportunity, ...prev].slice(0, 50));
+    } else if (message.type === 'order_placed') {
+      // Confirm execution: find the most recent unconfirmed signal for this symbol+side
+      const { symbol, side } = message.data || {};
+      if (symbol && side) {
+        const tradeSide = side === 'BUY' ? 'BUY' : 'SELL';
+        setRecentOpportunities(prev => {
+          const idx = prev.findIndex(o =>
+            o.symbol === symbol && o.side === tradeSide && !o.blockType && !o.wasExecuted
+            && (Date.now() - o.timestamp) < 15000
+          );
+          if (idx === -1) return prev;
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], wasExecuted: true };
+          return updated;
+        });
+      }
     } else if (message.type === 'fta_exit_signal') {
       const alert: FTAExitSignal = {
         ...message.data,
@@ -165,7 +203,8 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
               qualityRecommendation: s.blockReason === 'VWAP_FILTER' ? 'VWAP' : s.blockReason === 'CASCADE_PROTECTION' ? 'CASCADE' : s.recommendation,
               blockType: s.blockReason === 'VWAP_FILTER' ? 'VWAP_FILTER' : s.blockReason === 'CASCADE_PROTECTION' ? 'CASCADE_PROTECTION' : (s.wasBlocked ? 'QUALITY_FILTER' : undefined),
               timestamp: s.timestamp,
-              signalPrice: s.signalPrice
+              signalPrice: s.signalPrice,
+              wasExecuted: s.wasExecuted === true,
             }));
             setRecentOpportunities(opportunities);
           }
@@ -224,7 +263,11 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
     if (opp.blockType === 'QUALITY_FILTER') {
       return { label: 'SKIP', color: 'text-red-400 bg-red-500/15 border-red-500/30', icon: <XCircle className="h-3 w-3" /> };
     }
-    // Taken trades — show quality recommendation
+    // Not blocked but not executed — detected only
+    if (!opp.wasExecuted) {
+      return { label: 'DETECT', color: 'text-zinc-400 bg-zinc-500/15 border-zinc-500/30', icon: <Gauge className="h-3 w-3" /> };
+    }
+    // Truly taken trades — show quality recommendation
     if (opp.qualityRecommendation === 'STRONG') {
       return { label: 'STRONG', color: 'text-green-400 bg-green-500/15 border-green-500/30', icon: <CheckCircle2 className="h-3 w-3" /> };
     }
@@ -242,8 +285,10 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
   const isBlocked = (opp: TradeOpportunity) =>
     opp.blockType === 'VWAP_FILTER' || opp.blockType === 'QUALITY_FILTER' || opp.blockType === 'CASCADE_PROTECTION';
 
+  const isTaken = (opp: TradeOpportunity) => !isBlocked(opp) && opp.wasExecuted === true;
+
   // Compute stats
-  const taken = recentOpportunities.filter(o => !isBlocked(o));
+  const taken = recentOpportunities.filter(o => isTaken(o));
   const skipped = recentOpportunities.filter(o => isBlocked(o));
   const avgScore = recentOpportunities.length > 0
     ? (recentOpportunities.reduce((sum, o) => sum + (o.qualityScore?.totalScore || 0), 0) / recentOpportunities.length)
@@ -255,53 +300,76 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
     : filter === 'TAKEN'
     ? taken
     : skipped;
-
-  const formatPrice = (price: number) => {
-    if (price < 0.01) return price.toFixed(6);
-    if (price < 1) return price.toFixed(4);
-    if (price < 100) return price.toFixed(2);
-    return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  };
+  const isOpen = collapsible ? isExpanded : true;
 
   return (
-    <div className={cn("rounded-lg border bg-card overflow-hidden", className)}>
+    <div className={cn("rounded-xl border bg-card overflow-hidden shadow-sm", fillHeight && "flex h-full min-h-0 flex-col", className)}>
 
-      {/* Header row — click to expand */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors border-b border-transparent data-[open=true]:border-border text-left"
-        data-open={isExpanded}
-      >
-        <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs font-medium">Signal Feed</span>
-        <span className="text-xs text-muted-foreground">{recentOpportunities.length}</span>
+      {collapsible ? (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-accent/30 transition-colors border-b border-border/40 bg-gradient-to-b from-background to-background/70 text-left"
+          data-open={isExpanded}
+        >
+          <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium tracking-wide">Signal Feed</span>
+          <span className="text-[10px] text-muted-foreground">{recentOpportunities.length}</span>
 
-        <div className="flex items-center gap-2 ml-auto text-xs">
-          <span className="text-green-400 tabular-nums">{taken.length}✓</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-red-400 tabular-nums">{skipped.length}✗</span>
-          {avgScore > 0 && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className={cn("tabular-nums", avgScore >= 2 ? "text-green-400" : avgScore >= 1 ? "text-blue-400" : "text-yellow-400")}>
-                Q{avgScore.toFixed(1)}
-              </span>
-            </>
-          )}
-          <span className={cn(
-            "text-[9px] px-1.5 py-0.5 rounded font-medium",
-            isConnected
-              ? isPassiveMode ? "bg-yellow-500/15 text-yellow-400" : "bg-green-500/15 text-green-400"
-              : "bg-muted text-muted-foreground"
-          )}>
-            {isConnected ? (isPassiveMode ? 'Passive' : 'Live') : 'Off'}
-          </span>
-          <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+          <div className="flex items-center gap-1.5 ml-auto text-[10px]">
+            <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-green-400 tabular-nums">{taken.length}✓</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-red-400 tabular-nums">{skipped.length}✗</span>
+            {avgScore > 0 && (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <span className={cn("rounded-full px-1.5 py-0.5 tabular-nums", avgScore >= 2 ? "bg-green-500/10 text-green-400" : avgScore >= 1 ? "bg-blue-500/10 text-blue-400" : "bg-yellow-500/10 text-yellow-400")}>
+                  Q{avgScore.toFixed(1)}
+                </span>
+              </>
+            )}
+            <span className={cn(
+              "text-[9px] px-1.5 py-0.5 rounded font-medium",
+              isConnected
+                ? isPassiveMode ? "bg-yellow-500/15 text-yellow-400" : "bg-green-500/15 text-green-400"
+                : "bg-muted text-muted-foreground"
+            )}>
+              {isConnected ? (isPassiveMode ? 'Passive' : 'Live') : 'Off'}
+            </span>
+            <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+          </div>
+        </button>
+      ) : (
+        <div className="flex items-center gap-2.5 px-3 py-2 border-b border-border/40 bg-gradient-to-b from-background to-background/70 text-left">
+          <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium tracking-wide">Signal Feed</span>
+          <span className="text-[10px] text-muted-foreground">{recentOpportunities.length}</span>
+
+          <div className="flex items-center gap-1.5 ml-auto text-[10px]">
+            <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-green-400 tabular-nums">{taken.length}✓</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-red-400 tabular-nums">{skipped.length}✗</span>
+            {avgScore > 0 && (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <span className={cn("rounded-full px-1.5 py-0.5 tabular-nums", avgScore >= 2 ? "bg-green-500/10 text-green-400" : avgScore >= 1 ? "bg-blue-500/10 text-blue-400" : "bg-yellow-500/10 text-yellow-400")}>
+                  Q{avgScore.toFixed(1)}
+                </span>
+              </>
+            )}
+            <span className={cn(
+              "text-[9px] px-1.5 py-0.5 rounded font-medium",
+              isConnected
+                ? isPassiveMode ? "bg-yellow-500/15 text-yellow-400" : "bg-green-500/15 text-green-400"
+                : "bg-muted text-muted-foreground"
+            )}>
+              {isConnected ? (isPassiveMode ? 'Passive' : 'Live') : 'Off'}
+            </span>
+          </div>
         </div>
-      </button>
+      )}
 
-      {isExpanded && (
-        <div className="divide-y divide-border/30">
+      {isOpen && (
+        <div className={cn("divide-y divide-border/30", fillHeight && "flex min-h-0 flex-1 flex-col")}>
 
           {/* FTA alerts */}
           {ftaAlerts.length > 0 && (
@@ -320,13 +388,13 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
           )}
 
           {/* Filter tabs + stats toggle */}
-          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border/30">
+          <div className="flex items-center gap-1 px-2 py-1 border-b border-border/30 bg-background/40">
             {(['ALL', 'TAKEN', 'SKIPPED'] as SignalFilter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={cn(
-                  "text-[10px] px-2 py-0.5 rounded transition-colors",
+                  "text-[10px] px-2 py-0.5 rounded-full transition-colors",
                   filter === f
                     ? f === 'TAKEN' ? "bg-green-500/20 text-green-400"
                       : f === 'SKIPPED' ? "bg-red-500/20 text-red-400"
@@ -340,7 +408,7 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
             {scoreBreakdown.length > 0 && (
               <button
                 onClick={() => setShowScoreStats(v => !v)}
-                className="ml-auto text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                className="ml-auto text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-muted/50"
               >
                 <ArrowUpDown className="h-2.5 w-2.5" />
                 Stats
@@ -359,11 +427,11 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
             };
             return (
               <div className="border-b border-border/30">
-                <div className="grid grid-cols-[52px_1fr_40px_44px_40px] px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide">
+                <div className="grid grid-cols-[48px_1fr_36px_42px_34px] px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide">
                   <span>Score</span><span>Avg PnL</span><span className="text-right">Win%</span><span className="text-right">MFE/MAE</span><span className="text-right">Sigs</span>
                 </div>
                 {scoreBreakdown.map((row) => (
-                  <div key={row.score} className="grid grid-cols-[52px_1fr_40px_44px_40px] px-3 py-1.5 items-center border-t border-border/20 text-[10px]">
+                  <div key={row.score} className="grid grid-cols-[48px_1fr_36px_42px_34px] px-3 py-1.25 items-center border-t border-border/20 text-[10px]">
                     <span className={cn("font-mono font-medium", scoreColors[row.label])}>{row.score}/3</span>
                     <div className="flex items-center gap-1.5 pr-2">
                       <div className="flex-1 h-1 bg-muted/40 rounded-full overflow-hidden">
@@ -381,9 +449,9 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
           })()}
 
           {/* Signal rows — Aster-style flat table */}
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className={cn(fillHeight ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[360px] overflow-y-auto")}>
             {/* Column header */}
-            <div className="grid grid-cols-[16px_90px_64px_1fr_60px_56px_32px] gap-0 px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide sticky top-0">
+            <div className="grid grid-cols-[16px_86px_58px_1fr_56px_52px_28px] gap-0 px-3 py-1 bg-muted/20 text-[9px] text-muted-foreground uppercase tracking-wide sticky top-0">
               <span></span>
               <span>Symbol</span>
               <span>Score</span>
@@ -408,10 +476,17 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                   <div
                     key={`${opp.symbol}-${opp.timestamp}-${idx}`}
                     className={cn("border-t border-border/20 transition-colors cursor-pointer", isOpen ? "bg-accent/20" : "hover:bg-accent/10", blocked && "opacity-60")}
-                    onClick={() => setExpandedSignal(isOpen ? null : idx)}
+                    onClick={() => {
+                      if (onSignalClick) {
+                        onSignalClick(opp.symbol, opp.timestamp);
+                      }
+                      setExpandedSignal(isOpen ? null : idx);
+                    }}
+                    onMouseEnter={() => onSignalHover?.(opp.symbol, opp.timestamp)}
+                    onMouseLeave={() => onSignalHoverEnd?.()}
                   >
                     {/* Main row */}
-                    <div className="grid grid-cols-[16px_90px_64px_1fr_60px_56px_32px] gap-0 px-3 py-1.5 items-center text-xs">
+                    <div className="grid grid-cols-[16px_86px_58px_1fr_56px_52px_28px] gap-0 px-3 py-1.25 items-center text-[10px]">
 
                       {/* Direction dot */}
                       <span className={opp.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
@@ -426,7 +501,7 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className={cn(
-                              "font-mono text-[10px] cursor-help",
+                              "font-mono text-[9px] cursor-help",
                               qs.totalScore >= 2 ? "text-green-400" : qs.totalScore === 1 ? "text-yellow-400" : "text-muted-foreground"
                             )}>
                               {qs.spikeScore}/{qs.volumeTrendScore}/{qs.regimeScore}
@@ -441,10 +516,10 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                       ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
 
                       {/* Reason (truncated) */}
-                      <span className="text-[10px] text-muted-foreground truncate px-1" title={opp.reason}>{opp.reason}</span>
+                      <span className="text-[9px] text-muted-foreground truncate px-1" title={opp.reason}>{opp.reason}</span>
 
                       {/* Liq volume */}
-                      <span className="text-[10px] text-muted-foreground text-right font-mono tabular-nums">
+                      <span className="text-[9px] text-muted-foreground text-right font-mono tabular-nums">
                         {opp.liquidationVolume > 0 ? `$${opp.liquidationVolume >= 1000 ? `${(opp.liquidationVolume / 1000).toFixed(1)}k` : opp.liquidationVolume.toFixed(0)}` : '—'}
                       </span>
 
@@ -454,14 +529,14 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                       </span>
 
                       {/* Age */}
-                      <span className="text-[10px] text-muted-foreground text-right tabular-nums">{formatTime(opp.timestamp)}</span>
+                      <span className="text-[9px] text-muted-foreground text-right tabular-nums">{formatTime(opp.timestamp)}</span>
                     </div>
 
                     {/* Expanded detail panel */}
                     {isOpen && (
-                      <div className="px-3 pb-2.5 pt-0 space-y-2 border-t border-border/20 mt-0">
+                      <div className="px-3 pb-2 pt-0 space-y-1.5 border-t border-border/20 mt-0">
                         {blocked && opp.reason && (
-                          <div className={cn("text-[10px] px-2 py-1 rounded flex items-start gap-1.5",
+                          <div className={cn("text-[9px] px-2 py-1 rounded flex items-start gap-1.5",
                             opp.blockType === 'CASCADE_PROTECTION' ? "bg-purple-500/10 text-purple-300"
                             : opp.blockType === 'VWAP_FILTER' ? "bg-orange-500/10 text-orange-300"
                             : "bg-red-500/10 text-red-300"
@@ -472,7 +547,7 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                         )}
 
                         {qs?.metrics && (
-                          <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                          <div className="grid grid-cols-4 gap-1.5 text-[9px]">
                             {[
                               { label: 'Move', value: `${qs.metrics.priceChangePercent.toFixed(2)}%`, good: Math.abs(qs.metrics.priceChangePercent) >= 0.5 },
                               { label: 'Spike', value: qs.metrics.spikeTimeSeconds === 0 ? 'none' : `${qs.metrics.spikeTimeSeconds.toFixed(1)}s`, good: qs.metrics.spikeTimeSeconds > 0 && qs.metrics.spikeTimeSeconds < 30 },
@@ -480,7 +555,7 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                               { label: 'VWAP', value: `${qs.metrics.vwapDistance.toFixed(2)}%`, good: qs.metrics.isChoppyRegime },
                             ].map(m => (
                               <div key={m.label} className="bg-muted/30 rounded px-1.5 py-1">
-                                <span className="text-muted-foreground block text-[9px] uppercase tracking-wide">{m.label}</span>
+                                <span className="text-muted-foreground block text-[8px] uppercase tracking-wide">{m.label}</span>
                                 <span className={m.good ? 'text-green-400' : 'text-muted-foreground'}>{m.value}</span>
                               </div>
                             ))}
@@ -488,13 +563,13 @@ export default function TradeQualityPanel({ className, isPassiveMode = false }: 
                         )}
 
                         {qs?.reasons && qs.reasons.length > 0 && (
-                          <div className="text-[10px] text-muted-foreground space-y-0.5 pl-0.5">
+                          <div className="text-[9px] text-muted-foreground space-y-0.5 pl-0.5">
                             {qs.reasons.map((r, i) => <p key={i}>· {r}</p>)}
                           </div>
                         )}
 
                         {qs && qs.positionSizeMultiplier !== 1 && (
-                          <p className="text-[10px]">
+                          <p className="text-[9px]">
                             <span className="text-muted-foreground">Size: </span>
                             <span className={qs.positionSizeMultiplier > 1 ? 'text-green-400 font-medium' : 'text-yellow-400 font-medium'}>{qs.positionSizeMultiplier}×</span>
                           </p>

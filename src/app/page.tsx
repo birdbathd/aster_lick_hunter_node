@@ -11,7 +11,6 @@ import {
   TrendingDown,
   Wallet,
   Activity,
-  Target,
   ShieldAlert,
   Heart,
   ChevronDown,
@@ -20,10 +19,9 @@ import {
 import MinimalBotStatus from '@/components/MinimalBotStatus';
 import LiquidationSidebar from '@/components/LiquidationSidebar';
 import PositionTable from '@/components/PositionTable';
-import TradingViewChart from '@/components/TradingViewChart';
+import KLineChartComponent from '@/components/KLineChartComponent';
 import PnLChart from '@/components/PnLChart';
 import PerformanceCardInline from '@/components/PerformanceCardInline';
-import SessionPerformanceCard from '@/components/SessionPerformanceCard';
 import TradeQualityPanel from '@/components/TradeQualityPanel';
 import RecentOrdersTable from '@/components/RecentOrdersTable';
 import RiskModeSelector from '@/components/RiskModeSelector';
@@ -60,6 +58,8 @@ export default function DashboardPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [markPrices, setMarkPrices] = useState<Record<string, number>>({});
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+  const [chartScrollTimestamp, setChartScrollTimestamp] = useState<number | null>(null);
+  const [chartHighlightTimestamp, setChartHighlightTimestamp] = useState<number | null>(null);
   const [availableChartSymbols, setAvailableChartSymbols] = useState<string[]>([]);
   const [cascadeActive, setCascadeActive] = useState(false);
   const [cascadeCooldown, setCascadeCooldown] = useState<number | null>(null);
@@ -80,7 +80,6 @@ export default function DashboardPage() {
   }, [wsUrl]);
 
   useEffect(() => {
-    // Load initial data from data store
     const loadInitialData = async () => {
       try {
         const [balanceData, positionsData] = await Promise.all([
@@ -90,24 +89,6 @@ export default function DashboardPage() {
         setAccountInfo(balanceData);
         setPositions(positionsData);
         setBalanceStatus({ source: 'api', timestamp: Date.now() });
-        
-        // Fetch available symbols from liquidation database
-        try {
-          const liquidationSymbolsResp = await fetch('/api/liquidations/symbols');
-          const liquidationSymbolsData = await liquidationSymbolsResp.json();
-          if (liquidationSymbolsData.success && liquidationSymbolsData.symbols) {
-            // Combine configured symbols with symbols that have liquidation data
-            const configuredSymbols = config?.symbols ? Object.keys(config.symbols) : [];
-            const allSymbols = Array.from(new Set([...configuredSymbols, ...liquidationSymbolsData.symbols]));
-            setAvailableChartSymbols(allSymbols);
-          }
-        } catch (error) {
-          logger.error('[Dashboard] Failed to fetch liquidation symbols:', error);
-          // Fallback to configured symbols only
-          if (config?.symbols) {
-            setAvailableChartSymbols(Object.keys(config.symbols));
-          }
-        }
 
         // Fetch cascade protection state
         try {
@@ -174,9 +155,6 @@ export default function DashboardPage() {
           setHealthUnrealizedLoss(message.data.unrealizedLossPercent || 0);
         }
       }
-      // Forward all messages to data store for centralized handling
-      // (including paper_balance_update, paper_position_opened, etc.)
-      dataStore.handleWebSocketMessage(message);
     };
 
     const cleanupMessageHandler = websocketService.addMessageHandler(handleWebSocketMessage);
@@ -188,7 +166,36 @@ export default function DashboardPage() {
       dataStore.off('markPrices:update', handleMarkPricesUpdate);
       cleanupMessageHandler();
     };
-  }, []); // No dependencies - only run once on mount
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAvailableSymbols = async () => {
+      const configuredSymbols = config?.symbols ? Object.keys(config.symbols) : [];
+
+      try {
+        const liquidationSymbolsResp = await fetch('/api/liquidations/symbols');
+        const liquidationSymbolsData = await liquidationSymbolsResp.json();
+        if (!cancelled && liquidationSymbolsData.success && liquidationSymbolsData.symbols) {
+          setAvailableChartSymbols(Array.from(new Set([...configuredSymbols, ...liquidationSymbolsData.symbols])));
+          return;
+        }
+      } catch (error) {
+        logger.error('[Dashboard] Failed to fetch liquidation symbols:', error);
+      }
+
+      if (!cancelled) {
+        setAvailableChartSymbols(configuredSymbols);
+      }
+    };
+
+    loadAvailableSymbols();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config?.symbols]);
 
   // Refresh data manually if needed
   const handleRefresh = async () => {
@@ -339,8 +346,9 @@ export default function DashboardPage() {
                 <PaperTradingDashboard />
               )}
 
-              {/* Account Summary — unified terminal-style strip */}
-              <div className="border rounded-lg bg-card overflow-hidden grid grid-cols-2 lg:grid-cols-4 divide-border/50 divide-x divide-y lg:divide-y-0">
+              {/* Account Summary — primary balance strip */}
+              <div className="border rounded-lg bg-card overflow-hidden">
+                <div className="grid grid-cols-2 xl:grid-cols-5 divide-border/50 divide-y xl:divide-y-0 xl:divide-x">
 
                 {/* Wallet */}
                 <div
@@ -354,7 +362,7 @@ export default function DashboardPage() {
                     {showBalanceDetail ? <ChevronUp className="h-2.5 w-2.5 ml-auto" /> : <ChevronDown className="h-2.5 w-2.5 ml-auto" />}
                   </div>
                   {isLoading ? <Skeleton className="h-5 w-24" /> : (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="text-base font-semibold tabular-nums">{formatCurrency(liveAccountInfo.totalBalance)}</span>
                       {balanceStatus.error ? (
                         <Badge variant="destructive" className="h-3.5 text-[9px] px-1">ERR</Badge>
@@ -372,15 +380,25 @@ export default function DashboardPage() {
                     <span>Available</span>
                   </div>
                   {isLoading ? <Skeleton className="h-5 w-24" /> : (
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-base font-semibold tabular-nums">{formatCurrency(liveAccountInfo.availableBalance)}</span>
-                      {liveAccountInfo.totalBalance > 0 && (
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {((liveAccountInfo.availableBalance / liveAccountInfo.totalBalance) * 100).toFixed(0)}%
-                        </span>
-                      )}
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-semibold tabular-nums">{formatCurrency(liveAccountInfo.availableBalance)}</span>
+                        {liveAccountInfo.totalBalance > 0 && (
+                          <>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+                            <span className="text-[10px] text-muted-foreground tabular-nums">
+                              {((liveAccountInfo.availableBalance / liveAccountInfo.totalBalance) * 100).toFixed(0)}%
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* 24H Profit */}
+                <div className="px-3 py-2.5">
+                  <PerformanceCardInline />
                 </div>
 
                 {/* In Position */}
@@ -416,7 +434,7 @@ export default function DashboardPage() {
                 }`}>
                   <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
                     {liveAccountInfo.totalPnL >= 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-                    <span>Unrealized PnL</span>
+                    <span>Unrealised PnL</span>
                   </div>
                   {isLoading ? <Skeleton className="h-5 w-24" /> : (
                     <div className="flex items-baseline gap-1.5">
@@ -433,67 +451,37 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
+                </div>
 
-              </div>
+                {/* Desk strip — risk mode & alerts */}
+                <div className="border-t px-3 py-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <RiskModeSelector />
 
-              {/* Row 2: Performance & status strip */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-0.5">
-
-                <PerformanceCardInline />
-
-                <span className="hidden sm:block text-border">·</span>
-
-                <SessionPerformanceCard />
-
-                <span className="hidden sm:block text-border">·</span>
-
-                {/* Active symbols as inline chips */}
-                {config?.symbols && Object.keys(config.symbols).length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <Target className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{Object.keys(config.symbols).length}</span>
-                    <div className="flex gap-1">
-                      {Object.keys(config.symbols).slice(0, 4).map((symbol) => (
-                        <Badge key={symbol} variant="outline" className="h-4 text-[10px] px-1 font-normal">
-                          {symbol.replace('USDT', '')}
+                    {/* Cascade alert — inline */}
+                    {config?.global?.cascadeProtection?.enabled !== false && cascadeActive && (
+                      <div className="flex items-center gap-1">
+                        <ShieldAlert className="h-3 w-3 text-red-400 animate-pulse" />
+                        <Badge variant="destructive" className="h-4 text-[9px] px-1.5 animate-pulse">
+                          {config?.global?.cascadeProtection?.mode === 'BLOCK' ? 'PAUSED' : config?.global?.cascadeProtection?.mode === 'REDUCE' ? 'REDUCED' : 'DETECTED'}
+                          {cascadeCooldown && ` ${Math.max(0, Math.ceil((cascadeCooldown - Date.now()) / 60000))}m`}
                         </Badge>
-                      ))}
-                      {Object.keys(config.symbols).length > 4 && (
-                        <Badge variant="outline" className="h-4 text-[10px] px-1 font-normal text-muted-foreground">
-                          +{Object.keys(config.symbols).length - 4}
+                      </div>
+                    )}
+
+                    {/* Health alert — inline */}
+                    {healthPaused && (
+                      <div className="flex items-center gap-1">
+                        <Heart className="h-3 w-3 text-orange-400 animate-pulse" />
+                        <Badge variant="destructive" className="h-4 text-[9px] px-1.5 animate-pulse bg-orange-600" title={healthBlockReason || undefined}>
+                          PAUSED
+                          {healthUnrealizedLoss > 0 && ` · ${healthUnrealizedLoss.toFixed(1)}%`}
+                          {healthDrawdown > 0 && ` DD ${healthDrawdown.toFixed(1)}%`}
                         </Badge>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                )}
-
-                <span className="hidden sm:block text-border">·</span>
-
-                <RiskModeSelector />
-
-                {/* Cascade alert — inline */}
-                {config?.global?.cascadeProtection?.enabled !== false && cascadeActive && (
-                  <div className="flex items-center gap-1">
-                    <ShieldAlert className="h-3 w-3 text-red-400 animate-pulse" />
-                    <Badge variant="destructive" className="h-4 text-[9px] px-1.5 animate-pulse">
-                      {config?.global?.cascadeProtection?.mode === 'BLOCK' ? 'PAUSED' : config?.global?.cascadeProtection?.mode === 'REDUCE' ? 'REDUCED' : 'DETECTED'}
-                      {cascadeCooldown && ` ${Math.max(0, Math.ceil((cascadeCooldown - Date.now()) / 60000))}m`}
-                    </Badge>
-                  </div>
-                )}
-
-                {/* Health alert — inline */}
-                {healthPaused && (
-                  <div className="flex items-center gap-1">
-                    <Heart className="h-3 w-3 text-orange-400 animate-pulse" />
-                    <Badge variant="destructive" className="h-4 text-[9px] px-1.5 animate-pulse bg-orange-600" title={healthBlockReason || undefined}>
-                      PAUSED
-                      {healthUnrealizedLoss > 0 && ` · ${healthUnrealizedLoss.toFixed(1)}%`}
-                      {healthDrawdown > 0 && ` DD ${healthDrawdown.toFixed(1)}%`}
-                    </Badge>
-                  </div>
-                )}
-
+                </div>
               </div>
 
               {/* Balance Detail Panel — expands when Wallet is clicked */}
@@ -501,30 +489,51 @@ export default function DashboardPage() {
                 <BalanceDetailPanel walletBalance={liveAccountInfo.totalBalance} />
               )}
 
-              {/* Positions Table — most actionable first */}
-              <PositionTable
-                onClosePosition={handleClosePosition}
-                onViewChart={setSelectedSymbol}
-              />
+              <div className="space-y-3">
+                {/* Performance — full width */}
+                <PnLChart />
 
-              {/* PnL Chart */}
-              <PnLChart />
-
-              {/* Signal Feed */}
-              <TradeQualityPanel isPassiveMode={config?.global?.useTradeQualityScoring === false} />
-
-              {/* Trading Chart */}
-              {config?.symbols && Object.keys(config.symbols).length > 0 && selectedSymbol && (
-                <TradingViewChart
-                  symbol={selectedSymbol}
-                  positions={positions}
-                  availableSymbols={availableChartSymbols.length > 0 ? availableChartSymbols : Object.keys(config.symbols)}
-                  onSymbolChange={setSelectedSymbol}
+                {/* Positions Table — full width */}
+                <PositionTable
+                  onClosePosition={handleClosePosition}
+                  onViewChart={setSelectedSymbol}
                 />
-              )}
 
-              {/* Recent Orders */}
-              <RecentOrdersTable maxRows={100} />
+                {/* Trading Chart — full width */}
+                {config?.symbols && Object.keys(config.symbols).length > 0 && selectedSymbol && (
+                  <KLineChartComponent
+                    symbol={selectedSymbol}
+                    positions={positions}
+                    availableSymbols={availableChartSymbols.length > 0 ? availableChartSymbols : Object.keys(config.symbols)}
+                    onSymbolChange={setSelectedSymbol}
+                    scrollToTimestamp={chartScrollTimestamp}
+                    highlightTimestamp={chartHighlightTimestamp}
+                  />
+                )}
+
+                {/* Recent Orders (2/3) + Signal Feed (1/3) */}
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:items-start">
+                  <RecentOrdersTable maxRows={100} />
+
+                  <TradeQualityPanel
+                    className="h-full w-full"
+                    isPassiveMode={config?.global?.useTradeQualityScoring === false}
+                    defaultExpanded
+                    fillHeight
+                    collapsible={false}
+                    onSignalClick={(symbol, timestamp) => {
+                      setSelectedSymbol(symbol);
+                      setChartScrollTimestamp(timestamp);
+                    }}
+                    onSignalHover={(symbol, timestamp) => {
+                      if (symbol === selectedSymbol) {
+                        setChartHighlightTimestamp(timestamp);
+                      }
+                    }}
+                    onSignalHoverEnd={() => setChartHighlightTimestamp(null)}
+                  />
+                </div>
+              </div>
 
             </div>
           </PullToRefresh>

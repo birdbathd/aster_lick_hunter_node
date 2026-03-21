@@ -95,3 +95,4 @@ symbols.json
 
 # Optimizer config (local tuning data)
 optimize-config.js
+KIMI_PROMPT.md

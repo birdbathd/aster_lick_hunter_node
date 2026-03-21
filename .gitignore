@@ -66,3 +66,32 @@ core
 
 # Chat exports
 ChatExport*/
+
+# ═══════════════════════════════════════════════════════════════════
+# Private / internal files — NOT for public repo
+# ═══════════════════════════════════════════════════════════════════
+
+# Personal analysis & conversation history (contains account balances, trade data)
+CONVO
+LIQUIDATION_ANALYSIS.md
+OPUS_ANALYSIS_PROMPT.md
+PR_DESCRIPTION.md
+
+# Claude Code instructions (contains personal trade history, account details, strategy specifics)
+CLAUDE.md
+
+# Internal wiki (deployment-specific)
+WIKI.md
+
+# Aster exchange API docs (may be proprietary / not ours to redistribute)
+docs/aster-finance-futures-api.md
+
+# Per-deployment infrastructure
+ecosystem.config.js
+scripts/aster-notifier.cjs
+
+# Symbols list (exchange-specific, changes frequently)
+symbols.json
+
+# Optimizer config (local tuning data)
+optimize-config.js
